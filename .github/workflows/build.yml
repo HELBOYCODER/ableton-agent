@@ -1,0 +1,59 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e .[dev]
+      - name: Syntax check
+        run: |
+          python -m compileall -q src
+          python -c "import ast; ast.parse(open('src/ableton_agent/remote_script/ChatGPTBridge/__init__.py').read())"
+      - name: CLI smoke test
+        run: |
+          ableton-agent --version
+          ableton-agent send play --dry-run
+          ableton-agent config
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.python-version }}
+          path: dist/
+
+  release:
+    needs: test-build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build && python -m build
+      - name: Publish GitHub Release with wheel
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+      # Optional: publish to PyPI (needs a PYPI_API_TOKEN repo secret)
+      # - run: pip install twine && twine upload dist/*
+      #   env:
+      #     TWINE_USERNAME: __token__
+      #     TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ableton-agent"
+version = "0.1.0"
+description = "Control Ableton Live with any LLM (OpenAI-compatible API) - CLI like opencode, but for music production"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Ableton Agent Contributors"}]
+keywords = ["ableton", "llm", "ai", "music", "cli", "midi"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+    "openai>=1.30.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "build", "twine"]
+
+[project.scripts]
+ableton-agent = "ableton_agent.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/HELBOYCODER/ableton-agent"
+Issues = "https://github.com/HELBOYCODER/ableton-agent/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ableton_agent = ["remote_script/ChatGPTBridge/__init__.py"]
