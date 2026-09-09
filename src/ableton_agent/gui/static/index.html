@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ableton Agent Studio 🎹</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="mac-window">
+    <!-- macOS Window Title Bar -->
+    <header class="window-bar">
+      <div class="traffic-lights">
+        <span class="light close"></span>
+        <span class="light minimize"></span>
+        <span class="light maximize"></span>
+      </div>
+      <div class="window-title">
+        <span class="app-icon">🎹</span>
+        <span class="app-name">Ableton Agent Studio</span>
+        <span class="version-tag">v0.2.0 • macOS</span>
+      </div>
+      <div class="live-status-pill" id="livePill">
+        <span class="pulse-dot"></span>
+        <span class="status-text" id="statusText">Checking Live...</span>
+      </div>
+    </header>
+
+    <!-- Main Studio Dashboard -->
+    <main class="studio-body">
+
+      <!-- Top Row: Connection & Transport Bar -->
+      <section class="glass-panel connection-bar">
+        <div class="conn-info">
+          <div class="conn-icon">🎛️</div>
+          <div class="conn-details">
+            <h3 id="detectedLiveName">Ableton Live 12</h3>
+            <p id="bridgeStatusNote">ChatGPTBridge Remote Script ready on 127.0.0.1:9000</p>
+          </div>
+        </div>
+
+        <div class="transport-controls">
+          <button class="transport-btn play-btn" id="playBtn" title="Play">▶ Play</button>
+          <button class="transport-btn stop-btn" id="stopBtn" title="Stop">■ Stop</button>
+          <div class="bpm-box">
+            <label for="bpmInput">TEMPO</label>
+            <div class="bpm-input-wrap">
+              <input type="number" id="bpmInput" value="126" min="60" max="220" step="1">
+              <span class="bpm-unit">BPM</span>
+            </div>
+          </div>
+          <button class="action-btn" id="inspectBtn" title="Inspect Active Project">🔍 Inspect Set</button>
+          <button class="action-btn install-btn" id="installBtn" title="1-Click Auto Install Remote Script">⚡ Install Script</button>
+        </div>
+      </section>
+
+      <!-- Grid Layout: AI Studio & Music Theory -->
+      <div class="studio-grid">
+
+        <!-- Column 1: AI Music Prompt & Generator -->
+        <div class="glass-panel ai-panel">
+          <div class="panel-header">
+            <h2>✨ AI Music Producer</h2>
+            <span class="badge" id="activeModelBadge">gpt-4o</span>
+          </div>
+
+          <!-- Model Selector Pills -->
+          <div class="model-pills">
+            <button class="model-pill active" data-model="gpt-4o" data-endpoint="https://api.openai.com/v1">OpenAI (GPT-4o)</button>
+            <button class="model-pill" data-model="qwen2.5:14b" data-endpoint="http://localhost:11434/v1">Ollama 🆓</button>
+            <button class="model-pill" data-model="local-model" data-endpoint="http://localhost:1234/v1">LM Studio</button>
+            <button class="model-pill" data-model="llama-3.3-70b-versatile" data-endpoint="https://api.groq.com/openai/v1">Groq ⚡</button>
+            <button class="model-pill" data-model="deepseek-chat" data-endpoint="https://api.deepseek.com/v1">DeepSeek</button>
+          </div>
+
+          <!-- Quick Genre Presets -->
+          <div class="presets-row">
+            <span class="presets-label">Presets:</span>
+            <button class="preset-chip" data-prompt="Make a driving Tech House track at 126 BPM with punchy 909 kick, rolling bass, clap, and crisp hats">🥁 Tech House</button>
+            <button class="preset-chip" data-prompt="Make a relaxing Lo-Fi hip hop beat at 84 BPM with Rhodes piano chords, dusty vinyl drums, and mellow bass">☕ Lo-Fi Chill</button>
+            <button class="preset-chip" data-prompt="Build a cinematic Dark Ambient soundscape at 65 BPM with evolving drone pad, slow filter sweep, and lush reverb">🌌 Dark Ambient</button>
+            <button class="preset-chip" data-prompt="Create an energetic Afrobeat groove at 112 BPM with syncopated polyrhythms, bouncy kalimba, and brass chords">🌴 Afrobeat</button>
+          </div>
+
+          <!-- Prompt Box -->
+          <div class="prompt-box">
+            <textarea id="promptInput" rows="3" placeholder="Describe the track you want to build in Ableton (e.g. 'Make an atmospheric techno track with rolling sub bass and syncopated hats')..."></textarea>
+            <div class="prompt-actions">
+              <label class="dry-check">
+                <input type="checkbox" id="dryCheck">
+                <span>Dry Run (Preview JSON only)</span>
+              </label>
+              <button class="primary-btn" id="generateBtn">
+                <span class="btn-text">🚀 Build in Ableton Live</span>
+                <span class="btn-spinner" style="display:none;"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Command Feed -->
+          <div class="feed-section">
+            <div class="feed-header">
+              <span>LIVE COMMAND EXECUTION FEED</span>
+              <button class="clear-btn" id="clearLogBtn">Clear</button>
+            </div>
+            <div class="feed-log" id="feedLog">
+              <div class="log-entry system">[System] Ableton Agent Studio connected. Ready for creative flow.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 2: Music Theory & Euclidean Sequencer -->
+        <div class="glass-panel theory-panel">
+          <div class="panel-header">
+            <h2>🎼 Groove & Theory Engine</h2>
+            <span class="badge badge-accent">Humanized MIDI</span>
+          </div>
+
+          <!-- Chords Builder Card -->
+          <div class="subcard">
+            <div class="subcard-title">
+              <span>🎹 Harmonic Chord Generator</span>
+              <span class="subcard-tag">Scales & Progressions</span>
+            </div>
+            <div class="chord-controls">
+              <div class="chord-row">
+                <label>ROOT NOTE:</label>
+                <div class="note-selector" id="noteSelector">
+                  <button class="note-btn" data-note="C3">C</button>
+                  <button class="note-btn" data-note="D3">D</button>
+                  <button class="note-btn" data-note="E3">E</button>
+                  <button class="note-btn" data-note="F3">F</button>
+                  <button class="note-btn active" data-note="G3">G</button>
+                  <button class="note-btn" data-note="A2">A</button>
+                  <button class="note-btn" data-note="B2">B</button>
+                </div>
+              </div>
+              <div class="chord-row">
+                <label>TYPE:</label>
+                <div class="chord-types" id="chordTypes">
+                  <button class="type-btn active" data-type="min7">Min7</button>
+                  <button class="type-btn" data-type="maj7">Maj7</button>
+                  <button class="type-btn" data-type="min9">Min9</button>
+                  <button class="type-btn" data-type="sus4">Sus4</button>
+                  <button class="type-btn" data-type="dim">Dim</button>
+                </div>
+              </div>
+              <div class="chord-actions">
+                <span class="chord-preview" id="chordPreview">G3 Min7: [55, 58, 62, 65]</span>
+                <button class="secondary-btn" id="sendChordBtn">Send Chord to Live</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Euclidean Step Sequencer Card -->
+          <div class="subcard">
+            <div class="subcard-title">
+              <span>🥁 16-Step Euclidean Rhythm Sequencer</span>
+              <span class="subcard-tag" id="euclideanFormula">5 Hits / 16 Steps (Afro/House)</span>
+            </div>
+            <!-- Interactive LED Step Grid -->
+            <div class="step-grid" id="stepGrid">
+              <!-- 16 steps generated dynamically -->
+            </div>
+            <div class="sequencer-sliders">
+              <div class="slider-group">
+                <label for="hitsSlider">PULSES (HITS): <span id="hitsVal">5</span></label>
+                <input type="range" id="hitsSlider" min="1" max="16" value="5">
+              </div>
+              <div class="slider-group">
+                <label for="stepsSlider">GRID STEPS: <span id="stepsVal">16</span></label>
+                <input type="range" id="stepsSlider" min="4" max="16" value="16" step="1">
+              </div>
+              <div class="slider-group">
+                <label for="swingSlider">SWING / GROOVE: <span id="swingVal">15%</span></label>
+                <input type="range" id="swingSlider" min="0" max="50" value="15">
+              </div>
+            </div>
+            <div class="sequencer-actions">
+              <button class="secondary-btn" id="sendGrooveBtn">🔥 Send Beat to Ableton</button>
+            </div>
+          </div>
+
+          <!-- MCP Server Connect Card -->
+          <div class="subcard mcp-card">
+            <div class="subcard-title">
+              <span>🔌 Model Context Protocol (MCP)</span>
+              <span class="subcard-tag status-on">Ready</span>
+            </div>
+            <p class="mcp-desc">Hook Claude Desktop or Cursor straight into your live music session.</p>
+            <div class="mcp-actions">
+              <button class="mcp-copy-btn" id="copyMcpBtn">📋 Copy Claude Desktop Config</button>
+              <span class="copy-feedback" id="copyFeedback" style="display:none;">Copied to clipboard!</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Bottom: Live Set Inspector (Active Tracks) -->
+      <section class="glass-panel set-inspector">
+        <div class="inspector-header">
+          <div class="inspector-title">
+            <span>🎚️ Live Project Inspector</span>
+            <span class="track-count" id="trackCount">0 Tracks Detected</span>
+          </div>
+          <button class="refresh-btn" id="refreshSetBtn">↻ Refresh</button>
+        </div>
+        <div class="tracks-container" id="tracksContainer">
+          <div class="empty-tracks">Click "Inspect Set" or "Refresh" to read current Ableton tracks and devices.</div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Modal Notifications / Alerts -->
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

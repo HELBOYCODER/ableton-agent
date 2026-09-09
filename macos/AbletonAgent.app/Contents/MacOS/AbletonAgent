@@ -1,0 +1,18 @@
+#!/bin/bash
+# Native macOS App Executable for Ableton Agent Studio
+APP_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+
+# Find Python 3
+if command -v python3 &>/dev/null; then
+    PY="python3"
+elif [ -f "/usr/local/bin/python3" ]; then
+    PY="/usr/local/bin/python3"
+elif [ -f "/opt/homebrew/bin/python3" ]; then
+    PY="/opt/homebrew/bin/python3"
+else
+    osascript -e 'display alert "Python 3 Required" message "Please install Python 3 or run: brew install python"'
+    exit 1
+fi
+
+export PYTHONPATH="$APP_DIR/src:$PYTHONPATH"
+exec "$PY" -m ableton_agent.cli app

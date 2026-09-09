@@ -120,6 +120,11 @@ def cmd_theory(a):
         print("euclidean rhythm (%d hits / %d steps): %s" % (a.hits, a.steps, pattern))
 
 
+def cmd_app(a):
+    from .gui.server import start_server
+    start_server(port=a.port, open_browser=not a.no_open)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="ableton-agent",
@@ -169,6 +174,11 @@ def main(argv=None):
     sp.add_argument("--hits", type=int, default=3, help="number of rhythm hits (for euclidean)")
     sp.add_argument("--steps", type=int, default=8, help="number of steps (for euclidean)")
     sp.set_defaults(func=cmd_theory)
+
+    sp = sub.add_parser("app", aliases=["gui"], help="launch macOS visual studio companion")
+    sp.add_argument("--port", type=int, default=8765, help="local studio port (default 8765)")
+    sp.add_argument("--no-open", action="store_true", help="do not auto-open browser")
+    sp.set_defaults(func=cmd_app)
 
     args = p.parse_args(argv)
     if not getattr(args, "func", None):

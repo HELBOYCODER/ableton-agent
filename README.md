@@ -16,13 +16,29 @@ you:  "make a tech house track at 126 BPM"
 ```bash
 pip install git+https://github.com/HELBOYCODER/ableton-agent.git
 # or from a release wheel:
-pip install ableton_agent-0.2.0-py3-none-any.whl
+pip install ableton_agent-0.2.1-py3-none-any.whl
 
 # install the Ableton Remote Script (auto-detects your Live version):
 ableton-agent install
 # then: restart Ableton > Preferences > Link/Tempo/MIDI
 #       > Control Surface = ChatGPTBridge
 ```
+
+## macOS Visual Studio (Zero Setup) 🖥️🎹
+
+For musicians & producers who prefer a visual interface without using the terminal:
+
+```bash
+ableton-agent app    # launches macOS visual companion
+# or on Mac: double-click AbletonAgent.app / AbletonAgent.command
+```
+
+- **1-Click Auto-Install**: Detects Live 11/12 and installs `ChatGPTBridge` with one tap.
+- **Visual AI Producer**: Pick models (OpenAI, Ollama Free, LM Studio, Groq, DeepSeek) and click instant genre presets.
+- **16-Step Euclidean Sequencer**: Interactive illuminated LED step sequencer with Swing & Velocity Humanizer.
+- **Harmonic Chord Generator**: Interactive chord pads with scale theory.
+- **Live Project Inspector**: Live status of all active tracks, instruments, audio effects, and BPM.
+- **Claude & Cursor Integration**: 1-click button to copy your MCP server config.
 
 ## CLI (opencode-style)
 
