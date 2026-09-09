@@ -97,6 +97,29 @@ def cmd_config(a):
     print('  export OPENAI_API_KEY="ollama"')
 
 
+def cmd_mcp(a):
+    from .mcp import run_mcp_server
+    run_mcp_server()
+
+
+def cmd_describe(a):
+    resp = core.send_command("describe_set", wait_response=True, timeout=a.timeout)
+    if resp:
+        print(json.dumps(resp, indent=2))
+    else:
+        print("describe_set command dispatched (check Ableton Log.txt or ensure ChatGPTBridge is active).")
+
+
+def cmd_theory(a):
+    from . import theory
+    if a.type == "chord":
+        pitches = theory.get_chord_notes(a.root, a.chord_type)
+        print("chord %s %s -> MIDI pitches: %s" % (a.root, a.chord_type, pitches))
+    elif a.type == "euclidean":
+        pattern = theory.euclidean_rhythm(a.hits, a.steps)
+        print("euclidean rhythm (%d hits / %d steps): %s" % (a.hits, a.steps, pattern))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="ableton-agent",
@@ -131,6 +154,21 @@ def main(argv=None):
 
     sp = sub.add_parser("config", help="show current model/endpoint config")
     sp.set_defaults(func=cmd_config)
+
+    sp = sub.add_parser("mcp", help="run native MCP (Model Context Protocol) server over stdio")
+    sp.set_defaults(func=cmd_mcp)
+
+    sp = sub.add_parser("describe", help="query active Ableton set state")
+    sp.add_argument("--timeout", type=float, default=2.0, help="seconds to wait for response")
+    sp.set_defaults(func=cmd_describe)
+
+    sp = sub.add_parser("theory", help="music theory & groove helper (chords, euclidean rhythms)")
+    sp.add_argument("type", choices=["chord", "euclidean"], help="mode: chord or euclidean")
+    sp.add_argument("--root", default="C3", help="root note (default: C3)")
+    sp.add_argument("--chord-type", default="min7", help="chord type: maj, min, min7, maj7, etc.")
+    sp.add_argument("--hits", type=int, default=3, help="number of rhythm hits (for euclidean)")
+    sp.add_argument("--steps", type=int, default=8, help="number of steps (for euclidean)")
+    sp.set_defaults(func=cmd_theory)
 
     args = p.parse_args(argv)
     if not getattr(args, "func", None):

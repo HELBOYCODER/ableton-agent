@@ -22,14 +22,20 @@ import os
 
 from _Framework.ControlSurface import ControlSurface
 
-HOST = "127.0.0.1"
-PORT = 9000
+HOST = os.environ.get("ABLETON_BRIDGE_HOST", "127.0.0.1")
+PORT = int(os.environ.get("ABLETON_BRIDGE_PORT", "9000"))
 
-# Optional: root folder of your sample library (also configurable from agent.py)
+# Optional: root folders of your sample library (configurable via ABLETON_SAMPLE_ROOTS)
 SAMPLE_ROOTS = [
     os.path.expanduser("~/Samples"),
     os.path.expanduser("~/Music/Samples"),
 ]
+_extra_roots = os.environ.get("ABLETON_SAMPLE_ROOTS")
+if _extra_roots:
+    for r in _extra_roots.split(os.pathsep):
+        r_exp = os.path.expanduser(r.strip())
+        if r_exp and r_exp not in SAMPLE_ROOTS:
+            SAMPLE_ROOTS.append(r_exp)
 
 
 def _find_sample(filename):
@@ -92,14 +98,14 @@ class ChatGPTBridge(ControlSurface):
                 break
             try:
                 cmd = json.loads(data.decode("utf-8"))
-                self.schedule_message(0, self._execute, cmd)
+                self.schedule_message(0, self._execute, cmd, _addr)
             except Exception as e:
                 self.log_message("ChatGPTBridge: bad packet: %s" % e)
 
     # ------------------------------------------------------------------
     # Command dispatcher (runs on Live's main thread)
     # ------------------------------------------------------------------
-    def _execute(self, cmd):
+    def _execute(self, cmd, addr=None):
         song = self.song()
         action = cmd.get("action")
         args = cmd.get("args", {}) or {}
@@ -107,11 +113,25 @@ class ChatGPTBridge(ControlSurface):
             handler = getattr(self, "_do_" + action, None)
             if handler is None:
                 self.log_message("ChatGPTBridge: unknown action %s" % action)
+                if addr and self._sock:
+                    resp = json.dumps({"status": "error", "error": "unknown action: %s" % action})
+                    self._sock.sendto(resp.encode("utf-8"), addr)
                 return
-            handler(song, args)
+            result = handler(song, args)
             self.log_message("ChatGPTBridge: OK %s %s" % (action, args))
+            if addr and self._sock:
+                resp_dict = {"status": "ok", "action": action}
+                if result is not None:
+                    resp_dict["result"] = result
+                self._sock.sendto(json.dumps(resp_dict).encode("utf-8"), addr)
         except Exception as e:
             self.log_message("ChatGPTBridge: ERROR %s -> %s" % (action, e))
+            if addr and self._sock:
+                try:
+                    resp = json.dumps({"status": "error", "action": action, "error": str(e)})
+                    self._sock.sendto(resp.encode("utf-8"), addr)
+                except Exception:
+                    pass
 
     # ------------------------------------------------------------------
     # Project / transport
@@ -386,6 +406,7 @@ class ChatGPTBridge(ControlSurface):
             "return_tracks": [t.name for t in song.return_tracks],
         }
         self.log_message("ChatGPTBridge SET: " + json.dumps(info)[:4000])
+        return info
 
     def _do_message(self, song, args):
         self.show_message(str(args.get("text", "")))

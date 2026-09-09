@@ -47,10 +47,13 @@ AVAILABLE ACTIONS (exact names):
 - message              {text: string}  (status bar message in Live)
 
 RULES:
-- Sample library root is ~/Samples (configurable via SAMPLE_ROOTS in the
-  Remote Script). Use realistic file names; the bridge fuzzy-searches by name.
+- Sample library root is ~/Samples (configurable via SAMPLE_ROOTS or ABLETON_SAMPLE_ROOTS).
+  Use realistic file names; the bridge fuzzy-searches by name.
 - Beats: 1 bar of 4/4 = 4 beats. Pitches: middle C = 60, kick ~36,
   snare/clap ~38-40, closed hat ~42, open hat ~46.
+- DYNAMICS & GROOVE: Avoid flat velocity 100 on every note! Accent downbeats
+  (vel 95-115), medium offbeats (vel 75-88), ghost notes (vel 45-60). Vary note
+  lengths (e.g. staccato 0.125 vs sustained 0.5/1.0 beats) and apply syncopation.
 - Order commands logically: tempo -> tracks -> clips/notes -> mix -> fx.
 - Keep plans under 60 commands.
 - Your entire reply must be ONLY the JSON object.
@@ -130,12 +133,23 @@ def send_plan(plan, delay=0.15, dry_run=False):
         print("[agent] done - check Ableton (Log.txt for details).")
 
 
-def send_command(action, args=None, dry_run=False):
-    """Send a single raw command without the LLM."""
+def send_command(action, args=None, dry_run=False, wait_response=False, timeout=1.5):
+    """Send a single raw command without the LLM, optionally waiting for UDP response."""
     cmd = {"action": action, "args": args or {}}
     if dry_run:
         print(json.dumps(cmd))
-        return
+        return None
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.sendto(json.dumps(cmd).encode(), (UDP_HOST, UDP_PORT))
-    print("[agent] sent: %s" % json.dumps(cmd))
+    if wait_response:
+        sock.settimeout(timeout)
+    try:
+        sock.sendto(json.dumps(cmd).encode(), (UDP_HOST, UDP_PORT))
+        print("[agent] sent: %s" % json.dumps(cmd))
+        if wait_response:
+            try:
+                data, _ = sock.recvfrom(65535)
+                return json.loads(data.decode("utf-8"))
+            except socket.timeout:
+                return None
+    finally:
+        sock.close()
