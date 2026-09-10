@@ -1,23 +1,33 @@
 #!/bin/bash
 # ==============================================================================
-# Ableton Agent Studio — macOS 1-Click Launcher
+# ableton-agent — macOS 1-Click Interactive Terminal Launcher (Claude Code style)
 # ==============================================================================
+# Set terminal title
+printf "\033]0;ableton-agent 🎹 (Claude Code Terminal)\007"
+
+# Clear quarantine if downloaded from web
+xattr -d com.apple.quarantine "$0" 2>/dev/null || true
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$DIR"
+PARENT="$( cd "$DIR/.." && pwd )"
 
-echo "======================================================="
-echo "  🎹 Launching Ableton Agent Studio for macOS..."
-echo "======================================================="
+# Set PYTHONPATH to include project src if running from git/repo checkout
+if [ -d "$PARENT/src" ]; then
+    export PYTHONPATH="$PARENT/src:$PYTHONPATH"
+fi
 
-# Check Python 3
+# Find Python 3
 if command -v python3 &>/dev/null; then
-    PYTHON_BIN="python3"
-elif command -v python &>/dev/null; then
-    PYTHON_BIN="python"
+    PY="python3"
+elif [ -x "/usr/local/bin/python3" ]; then
+    PY="/usr/local/bin/python3"
+elif [ -x "/opt/homebrew/bin/python3" ]; then
+    PY="/opt/homebrew/bin/python3"
 else
-    osascript -e 'display alert "Python 3 Not Found" message "Please install Python 3 or run: brew install python"'
+    echo "Python 3 is required. Please install it via https://python.org or: brew install python"
+    read -p "Press Enter to exit..."
     exit 1
 fi
 
-# Run ableton-agent GUI
-exec "$PYTHON_BIN" -m ableton_agent.cli app
+# Launch the interactive Claude Code-style CLI terminal
+exec "$PY" -m ableton_agent.cli

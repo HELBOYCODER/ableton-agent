@@ -23,28 +23,8 @@ def cmd_run(a):
 
 
 def cmd_chat(a):
-    print("ableton-agent interactive chat (Ctrl-D / 'exit' to quit, ':dry' toggles dry-run)")
-    dry = a.dry_run
-    while True:
-        try:
-            line = input("ableton> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not line or line in ("exit", "quit"):
-            break
-        if line == ":dry":
-            dry = not dry
-            print("dry-run: %s" % dry)
-            continue
-        if line == ":config":
-            _print_config()
-            continue
-        try:
-            plan = core.get_plan(line, verbose=False)
-            core.send_plan(plan, dry_run=dry)
-        except Exception as e:
-            print("error: %s" % e)
+    from .terminal import run_terminal
+    run_terminal()
 
 
 def cmd_send(a):
@@ -182,7 +162,9 @@ def main(argv=None):
 
     args = p.parse_args(argv)
     if not getattr(args, "func", None):
-        p.print_help()
+        # Default behavior: Launch Claude Code-style interactive terminal!
+        from .terminal import run_terminal
+        run_terminal()
         return
     args.func(args)
 

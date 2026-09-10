@@ -1,18 +1,18 @@
 #!/bin/bash
-# Native macOS App Executable for Ableton Agent Studio
-APP_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# ==============================================================================
+# AbletonAgent.app wrapper — Launches interactive terminal in macOS Terminal.app
+# ==============================================================================
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+PARENT="$(cd "$DIR/.." && pwd)"
 
-# Find Python 3
-if command -v python3 &>/dev/null; then
-    PY="python3"
-elif [ -f "/usr/local/bin/python3" ]; then
-    PY="/usr/local/bin/python3"
-elif [ -f "/opt/homebrew/bin/python3" ]; then
-    PY="/opt/homebrew/bin/python3"
-else
-    osascript -e 'display alert "Python 3 Required" message "Please install Python 3 or run: brew install python"'
-    exit 1
-fi
-
-export PYTHONPATH="$APP_DIR/src:$PYTHONPATH"
-exec "$PY" -m ableton_agent.cli app
+# Launch interactive CLI inside a fresh Terminal.app window
+osascript <<EOF
+tell application "Terminal"
+    activate
+    if exists (window 1) and not busy of window 1 then
+        do script "export PYTHONPATH='$PARENT/src:\$PYTHONPATH' && python3 -m ableton_agent.cli" in window 1
+    else
+        do script "export PYTHONPATH='$PARENT/src:\$PYTHONPATH' && python3 -m ableton_agent.cli"
+    end if
+end tell
+EOF

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ableton-agent"
-version = "0.2.1"
+version = "0.3.0"
 description = "Control Ableton Live with any LLM (OpenAI-compatible API) - CLI like opencode, but for music production"
 readme = "README.md"
 requires-python = ">=3.9"

@@ -133,18 +133,20 @@ def send_plan(plan, delay=0.15, dry_run=False):
         print("[agent] done - check Ableton (Log.txt for details).")
 
 
-def send_command(action, args=None, dry_run=False, wait_response=False, timeout=1.5):
+def send_command(action, args=None, dry_run=False, wait_response=False, timeout=1.5, verbose=True):
     """Send a single raw command without the LLM, optionally waiting for UDP response."""
     cmd = {"action": action, "args": args or {}}
     if dry_run:
-        print(json.dumps(cmd))
+        if verbose:
+            print(json.dumps(cmd))
         return None
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     if wait_response:
         sock.settimeout(timeout)
     try:
         sock.sendto(json.dumps(cmd).encode(), (UDP_HOST, UDP_PORT))
-        print("[agent] sent: %s" % json.dumps(cmd))
+        if verbose:
+            print("[agent] sent: %s" % json.dumps(cmd))
         if wait_response:
             try:
                 data, _ = sock.recvfrom(65535)

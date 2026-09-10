@@ -1,75 +1,105 @@
 # ableton-agent 🎹🤖
 
-Control **Ableton Live 11/12 with any LLM** — an opencode-style CLI & native **MCP Server** for
-AI-driven music production. Model-agnostic: OpenAI, Ollama, LM Studio,
-DeepSeek, Groq, OpenRouter, or any OpenAI-compatible endpoint.
+<div align="center">
+  <img src="assets/icon.png" width="160" height="160" alt="ableton-agent logo" style="border-radius: 36px; box-shadow: 0 8px 32px rgba(0, 242, 254, 0.4);" />
+  <h3>Claude Code-Style AI Music Production Terminal for Ableton Live 11/12</h3>
+  <p>Talk with an AI music producer directly inside your terminal, plan and build tracks, generate humanized grooves, and control Ableton Live via CLI or native MCP.</p>
+</div>
+
+---
 
 ```
-you:  "make a tech house track at 126 BPM"
-      -> LLM builds a dynamic JSON command plan
-      -> ableton-agent streams it over UDP (with bidirectional ACK)
-      -> ChatGPTBridge Remote Script executes it inside Ableton
+  ╭─────────────────────────────────────────────────────────────╮
+  │  ● ableton-agent v0.3.0                        ● LIVE CONNECTED │
+  │  Claude Code-style AI Music Production Terminal             │
+  │                                                             │
+  │  Model: gpt-4o          Bridge: 127.0.0.1:9000 (12ms)       │
+  │  API:   https://api.openai.com/v1                           │
+  │                                                             │
+  │  Type /help for slash commands, or talk in natural language. │
+  ╰─────────────────────────────────────────────────────────────╯
+
+ableton-agent ❯ make a driving tech house track at 126 BPM with rolling bass and 909 drums
+● Thinking with gpt-4o...
+● Executing in Ableton Live (5 commands):
+  ├── [1/5] set_tempo(bpm=126.0)                   ✔ OK
+  ├── [2/5] create_midi_track(name="Kick")         ✔ OK
+  ├── [3/5] create_midi_track(name="Sub Bass")     ✔ OK
+  ├── [4/5] create_clip(track=1, slot=0)           ✔ OK
+  └── [5/5] add_notes(track=1, notes=8)            ✔ OK
+✔ Done! Check Ableton Live.
 ```
 
-## Install
+## 🚀 Quick Install
 
 ```bash
-pip install git+https://github.com/HELBOYCODER/ableton-agent.git
-# or from a release wheel:
-pip install ableton_agent-0.2.1-py3-none-any.whl
+pip install --upgrade git+https://github.com/HELBOYCODER/ableton-agent.git
+# or from release wheel:
+pip install ableton_agent-0.3.0-py3-none-any.whl
+```
 
-# install the Ableton Remote Script (auto-detects your Live version):
+### 1-Click Remote Script Setup
+Inside your terminal (or inside the interactive REPL):
+```bash
 ableton-agent install
-# then: restart Ableton > Preferences > Link/Tempo/MIDI
-#       > Control Surface = ChatGPTBridge
+# or inside the interactive REPL:
+ableton-agent ❯ /install
 ```
+Then in Ableton Live: **Preferences > Link, Tempo & MIDI > Control Surface = ChatGPTBridge**.
 
-## macOS Visual Studio (Zero Setup) 🖥️🎹
+---
 
-For musicians & producers who prefer a visual interface without using the terminal:
+## 💻 Claude Code-Style Interactive Terminal
+
+Just run `ableton-agent` with no arguments to launch the full interactive conversational terminal:
 
 ```bash
-ableton-agent app    # launches macOS visual companion
-# or on Mac: double-click AbletonAgent.app / AbletonAgent.command
+ableton-agent
 ```
 
-- **1-Click Auto-Install**: Detects Live 11/12 and installs `ChatGPTBridge` with one tap.
-- **Visual AI Producer**: Pick models (OpenAI, Ollama Free, LM Studio, Groq, DeepSeek) and click instant genre presets.
-- **16-Step Euclidean Sequencer**: Interactive illuminated LED step sequencer with Swing & Velocity Humanizer.
-- **Harmonic Chord Generator**: Interactive chord pads with scale theory.
-- **Live Project Inspector**: Live status of all active tracks, instruments, audio effects, and BPM.
-- **Claude & Cursor Integration**: 1-click button to copy your MCP server config.
+### 💬 Chat in Natural Language
+Speak in English or Persian:
+- *"make a 124 BPM deep house groove with jazzy chords and rolling bass"*
+- *"یه ریتم تکنو ۱۲۸ بساز با ساب‌بیس و کیک"*
+- *"add a minor 9th chord on track 1"*
+- *"what tracks and devices do I have currently?"*
+- *"mute the bass track and solo track 1"*
 
-## CLI (opencode-style)
+### ⚡ Slash Commands
 
-```bash
-# AI Music Generation
-ableton-agent run "make a tech house track at 126 BPM, intro build drop outro"
-ableton-agent run --dry-run "lo-fi beat at 82 BPM"   # print plan, don't touch Live
+| Command | Description |
+| :--- | :--- |
+| `/help` | Show categorized reference and prompt examples |
+| `/status` | Connection diagnostics, bridge latency, model, and ports |
+| `/connect` | Ping and test connection to Ableton Live bridge |
+| `/install` | 1-click install `ChatGPTBridge` into User Remote Scripts |
+| `/live`, `/set` | Display live project tracks, tempo, devices & clips in a formatted table |
+| `/play`, `/stop` | Instant Ableton transport playback control |
+| `/tempo <bpm>` | Set project tempo (e.g. `/tempo 126`) |
+| `/track <midi\|audio> [name]` | Quick-create a new track in Live |
+| `/chord <root> [type]` | Generate harmonic chord (e.g. `/chord A2 min7`) & send to track |
+| `/groove [hits] [steps]` | Generate Euclidean polyrhythm (e.g. `/groove 5 16`) |
+| `/model [name]` | Switch LLM model (`gpt-4o`, `qwen2.5:14b`, `llama-3.3-70b`, `deepseek-chat`) |
+| `/endpoint [url]` | Switch API base URL (Ollama, LM Studio, Groq, DeepSeek) |
+| `/mcp` | Print MCP config JSON snippet for Claude Desktop / Cursor |
+| `/dry` | Toggle dry-run mode (preview generated plan without sending to Live) |
+| `/clear` | Clear terminal screen |
+| `/exit`, `/quit` | Exit session |
 
-# Interactive session (opencode chat style)
-ableton-agent chat          # ':dry' toggle, ':config', 'exit'
+---
 
-# Inspect Live set state (bidirectional query)
-ableton-agent describe      # dumps tracks, loaded devices, clips, BPM
+## 🖥️ macOS 1-Click Desktop Launcher
 
-# Music Theory & Groove engine
-ableton-agent theory chord --root A2 --chord-type min7
-ableton-agent theory euclidean --hits 5 --steps 16
+For Mac users who prefer launching via Finder:
+1. Download **[AbletonAgent-macOS.zip](https://github.com/HELBOYCODER/ableton-agent/releases/download/v0.3.0/AbletonAgent-macOS.zip)** from Releases.
+2. Double-click **`AbletonAgent.command`** (or **`AbletonAgent.app`**).
+3. Terminal.app immediately opens running `ableton-agent`!
 
-# Direct commands (no LLM)
-ableton-agent send play
-ableton-agent send set_tempo '{"bpm": 126}'
+---
 
-ableton-agent config        # show active model / endpoint
-ableton-agent --version
-```
+## 🔌 Native Model Context Protocol (MCP) Server
 
-## Native Model Context Protocol (MCP) Server 🔌
-
-`ableton-agent` includes a built-in zero-dependency MCP server over stdio. Connect Claude Desktop, Cursor, Minis, or Windsurf directly to your Ableton Live session:
-
-Add to `claude_desktop_config.json` (or Cursor MCP settings):
+Connect Claude Desktop, Cursor, or Minis directly to Ableton Live without extra dependencies:
 
 ```json
 {
@@ -83,71 +113,60 @@ Add to `claude_desktop_config.json` (or Cursor MCP settings):
 ```
 
 **Exposed MCP Tools:**
-- `ableton_plan_and_run`: natural language music production prompt -> executes in Live
-- `ableton_send_command`: execute raw Live actions (play, stop, mute, add_notes...)
-- `ableton_describe_set`: live inspection of tracks, devices, clips, and tempo
-- `ableton_generate_groove`: music-theory chords & Euclidean syncopated rhythms with velocity humanization
+- `ableton_plan_and_run`: natural language prompt -> live plan execution
+- `ableton_send_command`: execute raw Live actions (`play`, `stop`, `set_volume`...)
+- `ableton_describe_set`: inspect tracks, loaded devices, clips, and tempo
+- `ableton_generate_groove`: harmonic chords & Euclidean syncopated rhythms with velocity humanization
 - `ableton_get_status`: inspect active model and UDP bridge config
 
-## Music Theory & Humanized Groove Engine 🎼
+---
 
-No more robotic velocity-100 MIDI! The built-in music theory engine adds:
-- **Groove Dynamics**: Humanized velocity curves (accented downbeats, ghost offbeats) and micro-timing jitter.
-- **Chord Progressions**: Generates full chords (min7, maj7, min9, dim, sus4) across all root keys.
-- **Euclidean Rhythm Generator**: Algorithmic syncopated rhythms (Tresillo 3/8, Afro/House 5/16, etc.).
+## 🎼 Music Theory & Humanized Groove Engine
 
-## Any model — no lock-in
-
-| Provider   | `LLM_BASE_URL`                      | `LLM_MODEL` (example)            |
-|------------|-------------------------------------|----------------------------------|
-| Ollama 🆓  | `http://localhost:11434/v1`         | `qwen2.5:14b`, `llama3.1`        |
-| LM Studio 🆓| `http://localhost:1234/v1`         | `local-model`                    |
-| DeepSeek   | `https://api.deepseek.com/v1`       | `deepseek-chat`                  |
-| Groq       | `https://api.groq.com/openai/v1`    | `llama-3.3-70b-versatile`        |
-| OpenRouter | `https://openrouter.ai/api/v1`      | any slug                         |
-| OpenAI     | *(default, unset)*                  | `gpt-4o` (default)               |
-
-Fully local & free:
+No robotic velocity-100 MIDI!
+- **Velocity & Microtiming Curves**: Accents on beat 1 and 3, ghost notes on offbeats, and swing jitter.
+- **Harmonic Chord Engine**: Computes min7, maj7, min9, dim, sus4, aug chords across all root keys.
+- **Euclidean Rhythm Generator**: Algorithmic syncopated rhythms (Tresillo 3/8, Afro/House 5/16).
 
 ```bash
-ollama pull qwen2.5:14b
-export LLM_BASE_URL="http://localhost:11434/v1"
-export LLM_MODEL="qwen2.5:14b"
-export OPENAI_API_KEY="ollama"
-ableton-agent run "make a tech house track at 126 BPM"
+ableton-agent theory chord --root A2 --chord-type min7
+ableton-agent theory euclidean --hits 5 --steps 16
 ```
 
-## Remote Control over Network (LAN)
+---
 
-Control Ableton on your Mac/Windows music rig from a separate Linux, server, or mobile terminal:
-- On Ableton machine: set `ABLETON_BRIDGE_HOST="0.0.0.0"` before launching Live.
-- On client machine: `export ABLETON_AGENT_HOST="192.168.1.50"` and run `ableton-agent`.
+## 🌐 Any Model — No Lock-in
 
-## What the LLM can do in Live
+| Provider | `LLM_BASE_URL` | `LLM_MODEL` (example) |
+| :--- | :--- | :--- |
+| **Ollama 🆓** | `http://localhost:11434/v1` | `qwen2.5:14b`, `llama3.1` |
+| **LM Studio 🆓** | `http://localhost:1234/v1` | `local-model` |
+| **DeepSeek** | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| **Groq ⚡** | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| **OpenAI** | *(default, unset)* | `gpt-4o` (default) |
 
-18+ actions: create MIDI/audio/return tracks · load samples from your library
-(fuzzy file-name search) · write MIDI clips (pitch/start/length/velocity) ·
-mix (volume, pan, mute, solo, sends to buses) · load built-in devices
-(Reverb, Delay, Glue Compressor...) & set their params · arrangement
-automation points · transport (play/stop/BPM) · inspect the set.
+---
 
-Sample library roots: configurable via `ABLETON_SAMPLE_ROOTS` (default `~/Samples` and `~/Music/Samples`).
-
-## Development & CI
-
-Every push runs the build workflow: syntax checks, CLI smoke tests on
-Python 3.9–3.12, and sdist/wheel builds. Tag a release to publish the
-wheel as a GitHub Release:
+## 📦 Single-Line CLI Commands (Non-Interactive)
 
 ```bash
-git tag v0.2.0 && git push --tags
+# One-shot build
+ableton-agent run "make a minimal techno groove at 130 BPM"
+ableton-agent run --dry-run "lo-fi beat at 82 BPM"
+
+# Quick transport & query
+ableton-agent send play
+ableton-agent send stop
+ableton-agent describe
 ```
 
-## Troubleshooting
+---
 
-- **Nothing happens in Live** → check `Log.txt`; everything is logged with
-  the `ChatGPTBridge:` prefix.
-- **`load_sample` only logs a path** → `insert_file` needs Live 12; on older
-  versions drag the found file in.
-- **Model replies with prose** → use ≥14B local models (e.g. `qwen2.5:14b`);
-  the agent retries and extracts JSON from fences automatically.
+## 🛠️ Testing & CI
+
+Every commit and tag runs tests on Python 3.9, 3.11, and 3.12:
+```bash
+python -m compileall -q src
+ableton-agent --version
+echo -e "/help\n/status\n/exit" | ableton-agent
+```
