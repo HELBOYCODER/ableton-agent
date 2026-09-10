@@ -135,24 +135,49 @@ ableton-agent theory euclidean --hits 5 --steps 16
 
 ---
 
-## 🌐 Any Model — No Lock-in
+## 🌐 Localhost & 100% Free AI Providers (Zero Cost)
 
-| Provider | `LLM_BASE_URL` | `LLM_MODEL` (example) |
-| :--- | :--- | :--- |
-| **Ollama 🆓** | `http://localhost:11434/v1` | `qwen2.5:14b`, `llama3.1` |
-| **LM Studio 🆓** | `http://localhost:1234/v1` | `local-model` |
-| **DeepSeek** | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| **Groq ⚡** | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
-| **OpenAI** | *(default, unset)* | `gpt-4o` (default) |
+`ableton-agent` is built with **first-class support for free models and localhost providers**. It auto-detects running local AI engines on your machine on startup:
+
+```bash
+# In the interactive terminal:
+ableton-agent ❯ /provider
+ableton-agent ❯ /provider ollama
+ableton-agent ❯ /provider 9router
+ableton-agent ❯ /provider openrouter-free
+
+# Or via CLI flag:
+ableton-agent providers --set ollama
+ableton-agent providers --set 9router
+```
+
+| Provider | Type | Endpoint | Best Free Models |
+| :--- | :--- | :--- | :--- |
+| **Ollama** | 💻 Localhost | `http://localhost:11434/v1` | `qwen2.5:14b`, `llama3.1:8b`, `deepseek-r1:14b` |
+| **LM Studio** | 💻 Localhost | `http://localhost:1234/v1` | Any loaded model (`local-model`) |
+| **9Router** | 💻 Localhost | `http://localhost:20128/v1` | `oc/mimo-v2.5-free`, `oc/ling-3.0-flash-fin-free` |
+| **OpenRouter Free** | ☁️ Cloud (Free) | `https://openrouter.ai/api/v1` | `google/gemini-2.0-flash-exp:free`, `meta-llama/llama-3.3-70b-instruct:free` |
+| **Groq Cloud** | ☁️ Cloud (Free Tier) | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` (lightning fast) |
+| **Google Gemini** | ☁️ Cloud (Free Tier) | `https://generativelanguage.googleapis.com` | `gemini-2.0-flash` (15 RPM free) |
+| **LocalAI** | 💻 Localhost | `http://localhost:8080/v1` | Self-hosted local models |
+| **Jan.ai** | 💻 Localhost | `http://localhost:1337/v1` | `mistral-ins-7b-q4` |
+| **OpenAI** | ☁️ Cloud | `https://api.openai.com/v1` | `gpt-4o`, `gpt-4o-mini` |
+
+### 🛡️ Smart Offline Heuristic Music Engine (0 API Keys / 0 Tokens)
+If you have no API key configured and no local LLM running, `ableton-agent` **never crashes or stops working**. It seamlessly activates its built-in rule-based music producer (`theory.py`) to generate authentic, humanized multi-track arrangements (Tech House, Techno, Lo-Fi Chill, Dark Ambient, Afrobeat) completely offline!
 
 ---
 
 ## 📦 Single-Line CLI Commands (Non-Interactive)
 
 ```bash
-# One-shot build
+# One-shot build with specific provider
 ableton-agent run "make a minimal techno groove at 130 BPM"
 ableton-agent run --dry-run "lo-fi beat at 82 BPM"
+
+# List and switch providers
+ableton-agent providers
+ableton-agent providers --set ollama --model qwen2.5:14b
 
 # Quick transport & query
 ableton-agent send play

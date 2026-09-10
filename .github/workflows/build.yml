@@ -28,11 +28,12 @@ jobs:
           ableton-agent --version
           ableton-agent send play --dry-run
           ableton-agent config
+          ableton-agent providers
           ableton-agent theory chord --root C3 --chord-type min7
           ableton-agent theory euclidean --hits 3 --steps 8
           ableton-agent app --help
           echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}' | ableton-agent mcp
-          echo -e "/help\n/status\n/exit" | ableton-agent
+          echo -e "/help\n/status\n/provider\n/exit" | ableton-agent
       - name: Build sdist + wheel
         run: python -m build
       - name: Upload artifacts

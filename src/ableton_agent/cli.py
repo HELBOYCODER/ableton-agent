@@ -90,6 +90,30 @@ def cmd_describe(a):
         print("describe_set command dispatched (check Ableton Log.txt or ensure ChatGPTBridge is active).")
 
 
+def cmd_providers(a):
+    from . import providers
+    if a.set:
+        info = providers.switch_provider(a.set, a.model)
+        print("Switched to provider: %s" % info["name"])
+        print("  Model    : %s" % info["model"])
+        print("  Endpoint : %s" % info["endpoint"])
+    else:
+        print("\nSupported Localhost & Free Providers:")
+        for k, p in providers.PROVIDERS.items():
+            loc = "[LOCAL]" if p["is_local"] else "[CLOUD]"
+            print("  %s %-16s %s" % (loc, k, p["name"]))
+            print("          Endpoint : %s" % p["endpoint"])
+            print("          Models   : %s" % ", ".join(p["models"][:4]))
+        detected = providers.detect_local_providers()
+        print("\nLive Local Engines on this machine:")
+        if detected:
+            for d in detected:
+                print("  ● %s (port %d)" % (d["name"], d["port"]))
+        else:
+            print("  (None currently detected on localhost)")
+        print("\nSwitch provider with: ableton-agent providers --set ollama\n")
+
+
 def cmd_theory(a):
     from . import theory
     if a.type == "chord":
@@ -139,6 +163,11 @@ def main(argv=None):
 
     sp = sub.add_parser("config", help="show current model/endpoint config")
     sp.set_defaults(func=cmd_config)
+
+    sp = sub.add_parser("providers", help="list and switch localhost/free AI providers (ollama, 9router...)")
+    sp.add_argument("--set", help="switch provider (ollama, lmstudio, 9router, openrouter-free, groq...)")
+    sp.add_argument("--model", help="custom model name")
+    sp.set_defaults(func=cmd_providers)
 
     sp = sub.add_parser("mcp", help="run native MCP (Model Context Protocol) server over stdio")
     sp.set_defaults(func=cmd_mcp)

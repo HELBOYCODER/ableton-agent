@@ -53,7 +53,8 @@ HISTORY_FILE = os.path.expanduser("~/.ableton_agent_history")
 SLASH_COMMANDS = [
     "/help", "/status", "/connect", "/install", "/live", "/set",
     "/play", "/stop", "/tempo", "/track", "/chord", "/groove",
-    "/model", "/endpoint", "/mcp", "/dry", "/clear", "/exit", "/quit",
+    "/model", "/endpoint", "/provider", "/providers", "/free",
+    "/mcp", "/dry", "/clear", "/exit", "/quit",
 ]
 
 
@@ -151,6 +152,7 @@ def print_help():
         ("/track <midi|audio> [name]", "Quick create a new track in Live"),
         ("/chord <root> [type]", "Generate chord (e.g. /chord C3 min7, G2 min9)"),
         ("/groove [hits] [steps]", "Generate Euclidean polyrhythm (e.g. /groove 5 16)"),
+        ("/provider [name]", "Switch provider (ollama, lmstudio, 9router, openrouter-free)"),
         ("/model [name]", "Show or switch active LLM (gpt-4o, qwen2.5:14b...)"),
         ("/endpoint [url]", "Show or set LLM API endpoint"),
         ("/mcp", "Display MCP server configuration for Claude Desktop / Cursor"),
@@ -176,15 +178,23 @@ def print_help():
 
 
 def print_status():
+    from . import providers
     connected, latency, set_info = get_live_status()
     installed, detected = is_script_installed()
+    local_engines = providers.detect_local_providers()
 
     print(C.BOLD + C.BR_WHITE + "\nAbleton Agent System Status:" + C.RESET)
     print("  Version      : " + C.BR_CYAN + "v" + __version__ + C.RESET)
     print("  Active Model : " + C.BR_MAGENTA + core.current_model() + C.RESET)
     print("  API Endpoint : " + C.DIM + (os.environ.get("LLM_BASE_URL") or "https://api.openai.com/v1") + C.RESET)
-    print("  API Key      : " + (C.BR_GREEN + "Set" + C.RESET if os.environ.get("OPENAI_API_KEY") else C.BR_RED + "NOT set" + C.RESET))
+    print("  API Key      : " + (C.BR_GREEN + "Set" + C.RESET if os.environ.get("OPENAI_API_KEY") else C.BR_YELLOW + "NOT set (Localhost / Offline mode)" + C.RESET))
     print("  UDP Bridge   : " + C.BR_WHITE + "%s:%d" % (core.UDP_HOST, core.UDP_PORT) + C.RESET)
+
+    if local_engines:
+        names = ", ".join(["%s (port %d)" % (e["name"], e["port"]) for e in local_engines])
+        print("  Local Engines: " + C.BR_GREEN + names + C.RESET)
+    else:
+        print("  Local Engines: " + C.DIM + "None detected on localhost (start Ollama or LM Studio)" + C.RESET)
 
     if connected:
         print("  Ableton Live : " + C.BR_GREEN + "CONNECTED" + C.RESET + C.DIM + " (latency: %.1fms)" % latency + C.RESET)
@@ -430,6 +440,43 @@ def run_terminal():
                     print(C.BR_GREEN + "✔ Active API endpoint: " + new_ep + C.RESET)
                 else:
                     print(C.BR_CYAN + "Current API endpoint: " + (os.environ.get("LLM_BASE_URL") or "https://api.openai.com/v1") + C.RESET)
+
+            elif cmd in ("/provider", "/providers", "/free"):
+                from . import providers
+                if len(parts) > 1:
+                    prov_key = parts[1]
+                    cust_model = parts[2] if len(parts) > 2 else None
+                    try:
+                        info = providers.switch_provider(prov_key, cust_model)
+                        print(C.BR_GREEN + "✔ Switched to provider: " + info["name"] + C.RESET)
+                        print("  Model    : " + C.BR_MAGENTA + info["model"] + C.RESET)
+                        print("  Endpoint : " + C.DIM + info["endpoint"] + C.RESET)
+                    except ValueError as ve:
+                        print(C.BR_RED + str(ve) + C.RESET)
+                else:
+                    print(C.BOLD + C.BR_WHITE + "\nSupported Localhost & Free Providers:" + C.RESET)
+                    for k, p in providers.PROVIDERS.items():
+                        local_tag = C.BR_GREEN + "[LOCAL]" + C.RESET if p["is_local"] else C.BR_CYAN + "[CLOUD]" + C.RESET
+                        print("  " + local_tag + " " + C.BOLD + k.ljust(16) + C.RESET + C.DIM + p["name"] + C.RESET)
+                        print("          Endpoint : " + C.DIM + p["endpoint"] + C.RESET)
+                        print("          Models   : " + C.BR_MAGENTA + ", ".join(p["models"][:4]) + C.RESET)
+
+                    # Check for live local engines
+                    detected = providers.detect_local_providers()
+                    print(C.BOLD + C.BR_WHITE + "\nDetected Live on Your Machine:" + C.RESET)
+                    if detected:
+                        for d in detected:
+                            print("  " + C.BR_GREEN + "● " + d["name"] + C.RESET + " (port " + str(d["port"]) + ")")
+                            if d.get("models"):
+                                print("    Available models: " + C.BR_CYAN + ", ".join(d["models"][:6]) + C.RESET)
+                    else:
+                        print("  " + C.DIM + "No localhost AI engines currently detected (start Ollama or LM Studio)." + C.RESET)
+
+                    print(C.BOLD + C.BR_WHITE + "\nUsage:" + C.RESET)
+                    print("  /provider ollama              (use local Ollama)")
+                    print("  /provider 9router             (use 9Router free models on port 20128)")
+                    print("  /provider openrouter-free     (use OpenRouter free 70B models)")
+                    print("  /provider lmstudio            (use LM Studio on port 1234)\n")
 
             elif cmd == "/mcp":
                 cfg = {

@@ -90,6 +90,23 @@ def current_model():
 
 
 def get_plan(user_prompt, temperature=0.4, max_retries=2, verbose=True):
+    from . import providers
+
+    # 1. Auto-detect running local provider if on default OpenAI without key
+    if not os.environ.get("OPENAI_API_KEY") and not os.environ.get("LLM_BASE_URL"):
+        local_detected = providers.detect_local_providers()
+        if local_detected:
+            best = local_detected[0]
+            providers.switch_provider(best["key"])
+            if verbose:
+                print("[agent] auto-detected running local engine: %s (%s)" % (best["name"], best["default_model"]))
+
+    # 2. If still no API key and no local endpoint, use built-in offline producer
+    if not os.environ.get("OPENAI_API_KEY") and not os.environ.get("LLM_BASE_URL"):
+        if verbose:
+            print("[agent] using offline music producer (no API key required; /provider to switch)")
+        return providers.generate_heuristic_plan(user_prompt)
+
     client = make_client()
     model = current_model()
     if verbose:
@@ -111,11 +128,15 @@ def get_plan(user_prompt, temperature=0.4, max_retries=2, verbose=True):
             return extract_json(resp.choices[0].message.content or "")
         except Exception as e:
             last_err = e
-            print("[agent] attempt %d failed (%s); retrying..." % (attempt + 1, e))
-            messages.append({"role": "user",
-                             "content": "Not valid JSON. Reply with ONLY "
-                                        '{"commands": [...]}.'})
-    raise RuntimeError("could not get a valid plan: %s" % last_err)
+            if attempt < max_retries:
+                print("[agent] attempt %d failed (%s); retrying..." % (attempt + 1, e))
+                messages.append({"role": "user",
+                                 "content": "Not valid JSON. Reply with ONLY "
+                                            '{"commands": [...]}.'})
+
+    # If LLM failed, gracefully fall back to heuristic producer
+    print("[agent] LLM unavailable (%s); falling back to offline music generator." % last_err)
+    return providers.generate_heuristic_plan(user_prompt)
 
 
 def send_plan(plan, delay=0.15, dry_run=False):
