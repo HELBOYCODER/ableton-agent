@@ -7,12 +7,13 @@ to talk with an AI music agent and control Ableton Live 11/12 in real-time.
 
 import json
 import os
-import re
-import readline
-import shutil
-import socket
 import sys
 import time
+
+try:  # readline is absent on stock Windows Python
+    import readline
+except ImportError:  # pragma: no cover - platform dependent
+    readline = None
 
 from . import __version__, core, theory
 from .cli import cmd_install
@@ -66,6 +67,8 @@ def _completer(text, state):
 
 
 def init_readline():
+    if readline is None:
+        return
     try:
         readline.set_completer(_completer)
         readline.parse_and_bind("tab: complete")
@@ -76,6 +79,8 @@ def init_readline():
 
 
 def save_readline():
+    if readline is None:
+        return
     try:
         readline.set_history_length(1000)
         readline.write_history_file(HISTORY_FILE)
@@ -117,7 +122,7 @@ def is_script_installed():
 # -----------------------------------------------------------------------------
 def print_banner(live_connected=False, latency_ms=0.0):
     model = core.current_model()
-    endpoint = os.environ.get("LLM_BASE_URL") or "https://api.openai.com/v1"
+    endpoint = core.current_endpoint()
     host_port = "%s:%d" % (core.UDP_HOST, core.UDP_PORT)
 
     if live_connected:
@@ -186,7 +191,7 @@ def print_status():
     print(C.BOLD + C.BR_WHITE + "\nAbleton Agent System Status:" + C.RESET)
     print("  Version      : " + C.BR_CYAN + "v" + __version__ + C.RESET)
     print("  Active Model : " + C.BR_MAGENTA + core.current_model() + C.RESET)
-    print("  API Endpoint : " + C.DIM + (os.environ.get("LLM_BASE_URL") or "https://api.openai.com/v1") + C.RESET)
+    print("  API Endpoint : " + C.DIM + core.current_endpoint() + C.RESET)
     print("  API Key      : " + (C.BR_GREEN + "Set" + C.RESET if os.environ.get("OPENAI_API_KEY") else C.BR_YELLOW + "NOT set (Localhost / Offline mode)" + C.RESET))
     print("  UDP Bridge   : " + C.BR_WHITE + "%s:%d" % (core.UDP_HOST, core.UDP_PORT) + C.RESET)
 
@@ -251,39 +256,35 @@ def execute_plan(plan, dry_run=False):
 
     print(C.BOLD + C.BR_WHITE + "\n● Executing in Ableton Live (%d commands):" % len(commands) + C.RESET)
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(1.0)
-
-    for i, cmd in enumerate(commands):
-        is_last = (i == len(commands) - 1)
-        prefix = "  └── " if is_last else "  ├── "
-        action = cmd.get("action", "")
-        args = cmd.get("args", {}) or {}
-        args_summary = json.dumps(args, ensure_ascii=False)
+    def report(index, total, command, ok, response):
+        prefix = "  └── " if index == total - 1 else "  ├── "
+        args_summary = json.dumps(command.get("args", {}) or {}, ensure_ascii=False)
         if len(args_summary) > 42:
             args_summary = args_summary[:39] + "..."
-
-        step_str = "[%d/%d] %s(%s)" % (i + 1, len(commands), action, args_summary)
-        sys.stdout.write(prefix + C.BR_WHITE + step_str.ljust(50) + C.RESET)
-        sys.stdout.flush()
-
+        step = "[%d/%d] %s(%s)" % (index + 1, total, command.get("action", ""), args_summary)
+        sys.stdout.write(prefix + C.BR_WHITE + step.ljust(50) + C.RESET)
         if dry_run:
             print(C.BR_YELLOW + "○ DRY-RUN" + C.RESET)
-            continue
-
-        try:
-            sock.sendto(json.dumps(cmd).encode("utf-8"), (core.UDP_HOST, core.UDP_PORT))
-            # Brief pause to let Live process
-            time.sleep(0.08)
+        elif ok:
             print(C.BR_GREEN + "✔ OK" + C.RESET)
-        except Exception as e:
-            print(C.BR_RED + "✖ ERR (%s)" % e + C.RESET)
+        else:
+            reason = (response or {}).get("error") or "no reply from Live"
+            print(C.BR_RED + "✖ %s" % reason + C.RESET)
 
-    sock.close()
-    if not dry_run:
-        print(C.BOLD + C.BR_GREEN + "✔ Done! Check Ableton Live." + C.RESET + "\n")
-    else:
+    results = core.send_plan(plan, dry_run=dry_run, verbose=False, on_result=report)
+
+    if dry_run:
         print(C.BOLD + C.BR_YELLOW + "✔ Dry run complete (no commands sent)." + C.RESET + "\n")
+    elif any(r["ok"] for r in results):
+        failed = [r for r in results if not r["ok"]]
+        if failed:
+            print(C.BOLD + C.BR_YELLOW + "✔ Done with %d failed command(s)." % len(failed) + C.RESET + "\n")
+        else:
+            print(C.BOLD + C.BR_GREEN + "✔ Done! Check Ableton Live." + C.RESET + "\n")
+    else:
+        print(C.BOLD + C.BR_RED + "✖ Ableton Live never answered on %s:%d."
+              % (core.UDP_HOST, core.UDP_PORT) + C.RESET)
+        print(C.DIM + "  Run /status, or start a fake Live with `ableton-agent simulate`.\n" + C.RESET)
 
 
 def handle_natural_language(user_prompt, dry_run=False):
@@ -406,9 +407,15 @@ def run_terminal():
                 pitches = theory.get_chord_notes(root, ctype)
                 print(C.BR_CYAN + "Chord %s %s -> MIDI pitches: %s" % (root, ctype, pitches) + C.RESET)
                 notes = [{"pitch": p, "start": 0.0, "length": 2.0, "velocity": 100} for p in pitches]
-                core.send_command("create_clip", {"track_index": 0, "slot": 0, "length_beats": 4.0}, verbose=False)
-                core.send_command("add_notes", {"track_index": 0, "slot": 0, "notes": notes}, verbose=False)
-                print(C.BR_GREEN + "✔ Sent chord to Track 1, Clip 1" + C.RESET)
+                execute_plan({"commands": [
+                    {"action": "create_midi_track", "args": {"name": "Agent Chords"}},
+                    {"action": "load_device",
+                     "args": {"track": "Agent Chords", "device_name": ["Grand Piano", "Wavetable", "Operator"]}},
+                    {"action": "create_clip",
+                     "args": {"track": "Agent Chords", "slot": 0, "length_beats": 4.0}},
+                    {"action": "add_notes",
+                     "args": {"track": "Agent Chords", "slot": 0, "notes": notes}},
+                ]}, dry_run=dry_run)
 
             elif cmd == "/groove":
                 hits = int(parts[1]) if len(parts) > 1 else 5
@@ -420,9 +427,15 @@ def run_terminal():
                 for i, h in enumerate(pattern):
                     if h:
                         notes.append({"pitch": 36, "start": round(i * step_len, 4), "length": 0.2, "velocity": 105})
-                core.send_command("create_clip", {"track_index": 0, "slot": 1, "length_beats": 4.0}, verbose=False)
-                core.send_command("add_notes", {"track_index": 0, "slot": 1, "notes": notes}, verbose=False)
-                print(C.BR_GREEN + "✔ Sent Euclidean beat to Track 1, Clip 2" + C.RESET)
+                execute_plan({"commands": [
+                    {"action": "create_midi_track", "args": {"name": "Agent Groove"}},
+                    {"action": "load_device",
+                     "args": {"track": "Agent Groove", "device_name": ["Kit-Core 909", "Drum Rack"]}},
+                    {"action": "create_clip",
+                     "args": {"track": "Agent Groove", "slot": 0, "length_beats": 4.0}},
+                    {"action": "add_notes",
+                     "args": {"track": "Agent Groove", "slot": 0, "notes": notes}},
+                ]}, dry_run=dry_run)
 
             elif cmd == "/model":
                 if len(parts) > 1:
@@ -439,7 +452,7 @@ def run_terminal():
                     os.environ["LLM_BASE_URL"] = new_ep
                     print(C.BR_GREEN + "✔ Active API endpoint: " + new_ep + C.RESET)
                 else:
-                    print(C.BR_CYAN + "Current API endpoint: " + (os.environ.get("LLM_BASE_URL") or "https://api.openai.com/v1") + C.RESET)
+                    print(C.BR_CYAN + "Current API endpoint: " + core.current_endpoint() + C.RESET)
 
             elif cmd in ("/provider", "/providers", "/free"):
                 from . import providers

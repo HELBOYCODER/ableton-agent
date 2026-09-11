@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Music theory & generative groove engine for ableton-agent."""
 
+import os
 import random
+import re
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 NOTE_TO_INT = {name: i for i, name in enumerate(NOTE_NAMES)}
@@ -18,6 +20,18 @@ SCALES = {
     "pentatonic_minor": [0, 3, 5, 7, 10],
     "pentatonic_major": [0, 2, 4, 7, 9],
     "blues": [0, 3, 5, 6, 7, 10],
+}
+
+CHORD_ALIASES = {
+    "major": "maj", "M": "maj", "": "maj",
+    "minor": "min", "m": "min", "-": "min",
+    "m7": "min7", "minor7": "min7", "min-7": "min7",
+    "m9": "min9", "minor9": "min9",
+    "major7": "maj7", "M7": "maj7",
+    "major9": "maj9",
+    "dom7": "7", "dominant7": "7",
+    "diminished": "dim", "augmented": "aug",
+    "sus": "sus4",
 }
 
 CHORD_INTERVALS = {
@@ -42,30 +56,40 @@ PROGRESSIONS = {
 }
 
 
+# Ableton Live labels MIDI note 60 as C3, so an octave number maps to
+# (octave + 2) * 12. Set ABLETON_AGENT_MIDDLE_C=C4 for scientific pitch
+# notation (the convention used by most DAWs other than Live).
+MIDDLE_C_OCTAVE = 4 if (os.environ.get("ABLETON_AGENT_MIDDLE_C", "C3").upper() == "C4") else 3
+OCTAVE_OFFSET = 5 - MIDDLE_C_OCTAVE
+
+
 def parse_pitch(note_str, default_octave=3):
-    """Convert note string like 'C4', 'F#3', 'Bb2' or int to MIDI pitch (0-127)."""
+    """Convert a note name ('C3', 'F#3', 'Bb2') or int to a MIDI pitch (0-127).
+
+    Octave numbers follow Live's display convention: C3 == 60.
+    """
     if isinstance(note_str, int):
         return max(0, min(127, note_str))
     note_str = str(note_str).strip()
-    if note_str.isdigit():
+    if note_str.lstrip("-").isdigit():
         return max(0, min(127, int(note_str)))
-    import re
     m = re.match(r"^([A-Ga-g][#b]?)(-?\d+)?$", note_str)
     if not m:
         return 60  # fallback to middle C
-    name, oct_s = m.group(1).capitalize(), m.group(2)
+    name, oct_s = m.group(1)[0].upper() + m.group(1)[1:], m.group(2)
     semitone = NOTE_TO_INT.get(name, 0)
     octave = int(oct_s) if oct_s is not None else default_octave
-    # MIDI note 60 is C4 (with C-1 = 0, C4 = (4 + 1) * 12 = 60)
-    pitch = (octave + 1) * 12 + semitone
+    pitch = (octave + OCTAVE_OFFSET) * 12 + semitone
     return max(0, min(127, pitch))
 
 
 def get_chord_notes(root_note, chord_type="min7", octave=3):
     """Return list of MIDI pitches for a chord."""
     base = parse_pitch(root_note, default_octave=octave)
-    intervals = CHORD_INTERVALS.get(chord_type.lower(), CHORD_INTERVALS["min"])
-    return [base + iv for iv in intervals if base + iv <= 127]
+    key = str(chord_type or "").strip()
+    key = CHORD_ALIASES.get(key, CHORD_ALIASES.get(key.lower(), key.lower()))
+    intervals = CHORD_INTERVALS.get(key, CHORD_INTERVALS["min"])
+    return [base + iv for iv in intervals if 0 <= base + iv <= 127]
 
 
 def euclidean_rhythm(hits, steps):
@@ -98,13 +122,15 @@ def euclidean_rhythm(hits, steps):
     return res
 
 
-def humanize_notes(notes, velocity_variance=8, timing_jitter=0.015, swing=0.0):
+def humanize_notes(notes, velocity_variance=8, timing_jitter=0.015, swing=0.0, rng=None):
     """
     Humanize MIDI notes to remove robotic AI feel:
     - velocity_variance: random velocity fluctuation (+/- range)
     - timing_jitter: micro-timing offset in beats
-    - swing: delayed offbeat eighth/sixteenth notes (0.0 = straight, 0.2 = swing)
+    - swing: 0.0 = straight, 1.0 = offbeat 16ths pushed a full half-step late
+    - rng: optional random.Random for reproducible output
     """
+    rng = rng or random
     humanized = []
     for n in notes:
         n_copy = dict(n)
@@ -113,18 +139,18 @@ def humanize_notes(notes, velocity_variance=8, timing_jitter=0.015, swing=0.0):
         vel = int(n_copy.get("velocity", 100))
 
         # Apply swing on offbeats (every odd 16th note, step 0.25)
-        step_pos = round(start / 0.25)
+        step_pos = int(round(start / 0.25))
         if step_pos % 2 == 1 and swing > 0:
-            start += swing * 0.1
+            start += swing * 0.125
 
         # Apply micro-jitter
         if timing_jitter > 0:
-            jitter = (random.random() - 0.5) * 2 * timing_jitter
+            jitter = (rng.random() - 0.5) * 2 * timing_jitter
             start = max(0.0, start + jitter)
 
         # Apply velocity variation
         if velocity_variance > 0:
-            v_delta = random.randint(-velocity_variance, velocity_variance)
+            v_delta = rng.randint(-velocity_variance, velocity_variance)
             vel = max(1, min(127, vel + v_delta))
 
         n_copy["start"] = round(start, 4)

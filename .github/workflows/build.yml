@@ -23,6 +23,8 @@ jobs:
         run: |
           python -m compileall -q src
           python -c "import ast; ast.parse(open('src/ableton_agent/remote_script/ChatGPTBridge/__init__.py').read())"
+      - name: Tests (offline Live simulator, no Ableton required)
+        run: pytest -q
       - name: CLI smoke test
         run: |
           ableton-agent --version
@@ -32,6 +34,8 @@ jobs:
           ableton-agent theory chord --root C3 --chord-type min7
           ableton-agent theory euclidean --hits 3 --steps 8
           ableton-agent app --help
+          ableton-agent run --dry-run "tech house at 126 bpm"
+          ableton-agent doctor || true
           echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}' | ableton-agent mcp
           echo -e "/help\n/status\n/provider\n/exit" | ableton-agent
       - name: Build sdist + wheel
