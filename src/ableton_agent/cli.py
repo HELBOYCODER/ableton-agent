@@ -11,7 +11,7 @@ from . import __version__, core
 
 
 def _print_config():
-    print("endpoint : %s" % (os.environ.get("LLM_BASE_URL") or "https://api.openai.com/v1"))
+    print("endpoint : %s" % core.current_endpoint())
     print("model    : %s" % core.current_model())
     print("udp      : %s:%d" % (core.UDP_HOST, core.UDP_PORT))
     print("api key  : %s" % ("set" if os.environ.get("OPENAI_API_KEY") else "NOT set"))
@@ -19,7 +19,9 @@ def _print_config():
 
 def cmd_run(a):
     plan = core.get_plan(a.prompt)
-    core.send_plan(plan, delay=a.delay, dry_run=a.dry_run)
+    results = core.send_plan(plan, delay=a.delay, dry_run=a.dry_run)
+    if not a.dry_run and results and not any(r["ok"] for r in results):
+        sys.exit("no response from Ableton Live - run `ableton-agent doctor` to diagnose")
 
 
 def cmd_chat(a):
@@ -129,6 +131,67 @@ def cmd_app(a):
     start_server(port=a.port, open_browser=not a.no_open)
 
 
+def cmd_simulate(a):
+    from .simulator import run_simulator
+    run_simulator(port=a.port, verbose=not a.quiet)
+
+
+def cmd_doctor(a):
+    """Diagnose the whole chain: script installed -> Live reachable -> LLM."""
+    from . import providers
+
+    ok = True
+    print("ableton-agent %s doctor" % __version__)
+    print("")
+
+    installed, live_dir = _find_installed_bridge()
+    if installed:
+        print("[ok]   Remote Script installed  : %s" % installed)
+    else:
+        ok = False
+        print("[FAIL] Remote Script installed  : not found (run `ableton-agent install`)")
+
+    ping = core.send_command("ping", {}, wait_response=True, timeout=a.timeout, verbose=False)
+    if ping and ping.get("status") == "ok":
+        result = ping.get("result") or {}
+        print("[ok]   Live bridge udp://%s:%d : bridge v%s, %.1f BPM, %s tracks"
+              % (core.UDP_HOST, core.UDP_PORT, result.get("bridge_version", "?"),
+                 result.get("tempo", 0.0), result.get("tracks", "?")))
+    else:
+        ok = False
+        print("[FAIL] Live bridge udp://%s:%d : no reply" % (core.UDP_HOST, core.UDP_PORT))
+        if installed and live_dir:
+            print("       In Live: Preferences > Link/Tempo/MIDI > Control Surface = ChatGPTBridge")
+        print("       No Ableton here? Run `ableton-agent simulate` in another shell.")
+
+    detected = providers.detect_local_providers()
+    if os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_BASE_URL"):
+        print("[ok]   LLM                      : %s (%s)" % (core.current_model(), core.current_endpoint()))
+    elif detected:
+        print("[ok]   LLM                      : local %s detected on port %d"
+              % (detected[0]["name"], detected[0]["port"]))
+    else:
+        print("[warn] LLM                      : none configured - offline producer will be used")
+
+    print("")
+    print("overall: %s" % ("ready" if ok else "not ready"))
+    if not ok:
+        sys.exit(1)
+
+
+def _find_installed_bridge():
+    home = os.path.expanduser("~")
+    for base in (os.path.join(home, "Library", "Preferences", "Ableton"),
+                 os.path.join(os.environ.get("APPDATA", home), "Ableton")):
+        if not os.path.isdir(base):
+            continue
+        for live_dir in sorted(os.listdir(base), reverse=True):
+            target = os.path.join(base, live_dir, "User Remote Scripts", "ChatGPTBridge")
+            if os.path.isdir(target):
+                return target, live_dir
+    return None, None
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="ableton-agent",
@@ -188,6 +251,16 @@ def main(argv=None):
     sp.add_argument("--port", type=int, default=8765, help="local studio port (default 8765)")
     sp.add_argument("--no-open", action="store_true", help="do not auto-open browser")
     sp.set_defaults(func=cmd_app)
+
+    sp = sub.add_parser("simulate", aliases=["sim"],
+                        help="run an offline fake Ableton Live (test without Live installed)")
+    sp.add_argument("--port", type=int, default=core.UDP_PORT, help="UDP port to listen on")
+    sp.add_argument("--quiet", action="store_true", help="do not print set state changes")
+    sp.set_defaults(func=cmd_simulate)
+
+    sp = sub.add_parser("doctor", help="diagnose bridge install, Live connection and LLM config")
+    sp.add_argument("--timeout", type=float, default=1.0, help="seconds to wait for Live")
+    sp.set_defaults(func=cmd_doctor)
 
     args = p.parse_args(argv)
     if not getattr(args, "func", None):

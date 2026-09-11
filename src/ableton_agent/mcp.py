@@ -5,8 +5,11 @@ Exposes Ableton Live control tools to AI clients (Claude Desktop, Cursor, Minis)
 via JSON-RPC 2.0 over standard I/O (zero external dependencies).
 """
 
+import io
 import json
+import os
 import sys
+
 from . import __version__, core, theory
 
 
@@ -115,6 +118,15 @@ TOOLS = [
                     "description": "Apply velocity swing and human timing jitter",
                     "default": True,
                 },
+                "track": {
+                    "type": "string",
+                    "description": "Optional track name (or index) to write the result into; omit to only return notes",
+                },
+                "slot": {
+                    "type": "integer",
+                    "description": "Clip slot to write into when 'track' is given",
+                    "default": 0,
+                },
             },
             "required": ["mode"],
         },
@@ -132,35 +144,49 @@ TOOLS = [
 
 def _handle_tool_call(name, args):
     if name == "ableton_get_status":
+        bridge = core.send_command("ping", {}, wait_response=True, timeout=0.6, verbose=False)
         info = {
             "version": __version__,
-            "llm_endpoint": core.make_client().base_url if hasattr(core.make_client(), "base_url") else "default",
+            "llm_endpoint": core.current_endpoint(),
             "model": core.current_model(),
+            "api_key_set": bool(os.environ.get("OPENAI_API_KEY")),
             "udp_target": "%s:%d" % (core.UDP_HOST, core.UDP_PORT),
+            "bridge_connected": bool(bridge and bridge.get("status") == "ok"),
+            "bridge": (bridge or {}).get("result"),
         }
         return json.dumps(info, indent=2)
 
     elif name == "ableton_plan_and_run":
         prompt = args.get("prompt")
+        if not prompt:
+            raise ValueError("prompt is required")
         dry_run = bool(args.get("dry_run", False))
         plan = core.get_plan(prompt, verbose=False)
-        core.send_plan(plan, dry_run=dry_run)
+        results = core.send_plan(plan, dry_run=dry_run, verbose=False)
+        failed = [
+            {"action": r["command"]["action"],
+             "error": (r["response"] or {}).get("error", "no response from Live bridge")}
+            for r in results if not r["ok"]
+        ]
         res = {
-            "status": "planned" if dry_run else "executed",
-            "commands_count": len(plan.get("commands", [])),
+            "status": "planned" if dry_run else ("executed" if not failed else "partial"),
+            "commands_count": len(results),
+            "failed": failed,
             "plan": plan,
         }
         return json.dumps(res, indent=2)
 
     elif name == "ableton_send_command":
         action = args.get("action")
+        if not action:
+            raise ValueError("action is required")
         action_args = args.get("args", {}) or {}
-        resp = core.send_command(action, action_args, wait_response=True, timeout=1.5)
+        resp = core.send_command(action, action_args, wait_response=True, timeout=1.5, verbose=False)
         return json.dumps({"action": action, "response": resp or "sent"}, indent=2)
 
     elif name == "ableton_describe_set":
         timeout = float(args.get("timeout", 1.5))
-        resp = core.send_command("describe_set", {}, wait_response=True, timeout=timeout)
+        resp = core.send_command("describe_set", {}, wait_response=True, timeout=timeout, verbose=False)
         if resp:
             return json.dumps(resp, indent=2)
         return "describe_set command dispatched to Ableton Live (check Ableton Log.txt or verify ChatGPTBridge connection)."
@@ -174,21 +200,53 @@ def _handle_tool_call(name, args):
             notes = [{"pitch": p, "start": 0.0, "length": 2.0, "velocity": 100} for p in pitches]
             if args.get("humanize", True):
                 notes = theory.humanize_notes(notes)
-            return json.dumps({"chord": "%s %s" % (root, ctype), "pitches": pitches, "notes": notes}, indent=2)
+            out = {"chord": "%s %s" % (root, ctype), "pitches": pitches, "notes": notes}
         else:
             hits = int(args.get("hits", 3))
-            steps = int(args.get("steps", 8))
+            steps = max(1, int(args.get("steps", 8)))
             pattern = theory.euclidean_rhythm(hits, steps)
             notes = []
             step_len = 4.0 / steps
             for i, hit in enumerate(pattern):
                 if hit:
-                    notes.append({"pitch": 60, "start": round(i * step_len, 4), "length": 0.25, "velocity": 105})
+                    notes.append({"pitch": 36, "start": round(i * step_len, 4), "length": 0.2, "velocity": 105})
             if args.get("humanize", True):
                 notes = theory.humanize_notes(notes, swing=0.1)
-            return json.dumps({"pattern": pattern, "hits": hits, "steps": steps, "notes": notes}, indent=2)
+            out = {"pattern": pattern, "hits": hits, "steps": steps, "notes": notes}
+
+        if args.get("track") is not None and notes:
+            out["sent"] = _write_notes_to_live(args["track"], int(args.get("slot", 0)), notes)
+        return json.dumps(out, indent=2)
 
     raise ValueError("Unknown tool: %s" % name)
+
+
+def _write_notes_to_live(track, slot, notes):
+    """Create a clip on `track` and write `notes` into it; return the acks."""
+    results = core.send_plan({"commands": [
+        {"action": "create_clip",
+         "args": {"track": track, "slot": slot, "length_beats": 4.0}},
+        {"action": "add_notes",
+         "args": {"track": track, "slot": slot, "notes": notes}},
+    ]}, verbose=False)
+    return [{"action": r["command"]["action"], "ok": r["ok"],
+             "error": (r["response"] or {}).get("error")} for r in results]
+
+
+def _call_tool_isolated(name, args):
+    """Run a tool with stdout captured.
+
+    stdout is the JSON-RPC transport: a stray print from the planner would
+    corrupt the stream and disconnect the MCP client.
+    """
+    buffer = io.StringIO()
+    with core.stdout_to(buffer):
+        out = _handle_tool_call(name, args)
+    noise = buffer.getvalue()
+    if noise.strip():
+        sys.stderr.write(noise)
+        sys.stderr.flush()
+    return out
 
 
 def run_mcp_server():
@@ -232,7 +290,7 @@ def run_mcp_server():
             tool_name = params.get("name")
             tool_args = params.get("arguments", {}) or {}
             try:
-                text_out = _handle_tool_call(tool_name, tool_args)
+                text_out = _call_tool_isolated(tool_name, tool_args)
                 resp = _make_result({
                     "content": [{"type": "text", "text": str(text_out)}],
                     "isError": False,

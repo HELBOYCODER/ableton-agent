@@ -46,6 +46,26 @@ ableton-agent install
 ableton-agent ❯ /install
 ```
 Then in Ableton Live: **Preferences > Link, Tempo & MIDI > Control Surface = ChatGPTBridge**.
+Restart Live after installing, then verify the whole chain:
+```bash
+ableton-agent doctor
+```
+`doctor` reports whether the Remote Script is installed, whether Live answers on
+`udp://127.0.0.1:9000` (bridge version, tempo, track count) and which LLM provider
+(or the offline engine) will be used. It exits non-zero when Live is unreachable.
+
+---
+
+## 🧪 Test Without Ableton Live (offline simulator)
+
+A fake Live that runs the **real** `ChatGPTBridge` remote script, so the full
+planner → UDP → Live Object Model path can be exercised anywhere (including CI):
+
+```bash
+ableton-agent simulate            # terminal 1: fake Live on udp://127.0.0.1:9000
+ableton-agent run "tech house at 126 bpm"   # terminal 2
+```
+The simulator prints the resulting set (tempo, tracks, devices, clips, notes) as it changes.
 
 ---
 
@@ -183,15 +203,46 @@ ableton-agent providers --set ollama --model qwen2.5:14b
 ableton-agent send play
 ableton-agent send stop
 ableton-agent describe
+
+# Diagnose the setup / run a fake Live
+ableton-agent doctor
+ableton-agent simulate --port 9000
 ```
+
+### 🎯 How tracks are targeted (safe by default)
+
+Generated plans **never address your existing tracks by absolute index**. Every
+command references a track by the name it created (`"track": "Sub Bass"`), or
+`-1` for "the track I just created". The bridge resolves names exactly first,
+then case-insensitively, then by substring, and returns an explicit error ack
+instead of touching the wrong track. Every new MIDI track also gets an
+instrument loaded (`load_device`) *before* notes are written — a bare MIDI track
+in Live is silent.
+
+Notes use Live's display convention (**C3 = MIDI 60**). Set
+`ABLETON_AGENT_MIDDLE_C=C4` if you prefer the C4 convention.
 
 ---
 
 ## 🛠️ Testing & CI
 
-Every commit and tag runs tests on Python 3.9, 3.11, and 3.12:
+Every commit and tag runs the suite on Python 3.9, 3.11, and 3.12. The tests
+drive the real remote script against the offline simulator, so no Ableton Live
+install is needed:
+
 ```bash
+pip install -e .[dev]
+pytest -q
 python -m compileall -q src
 ableton-agent --version
 echo -e "/help\n/status\n/exit" | ableton-agent
 ```
+
+### 🩺 Troubleshooting
+
+| Symptom | Fix |
+| :--- | :--- |
+| `doctor` says bridge not reachable | Select `ChatGPTBridge` as a Control Surface and restart Live; check that nothing else uses UDP 9000 (`ABLETON_BRIDGE_PORT` to change). |
+| Commands acknowledged but nothing is audible | The track has no instrument — the agent loads one automatically; if your Live edition lacks the device, the bridge falls back through the candidate list. |
+| Notes land in the wrong track | Use a track name (`"track": "Kick"`) rather than an index. |
+| MCP client shows parse errors | Fixed in 0.4.0 — stdout is now pure JSON-RPC (all logs go to stderr). |
