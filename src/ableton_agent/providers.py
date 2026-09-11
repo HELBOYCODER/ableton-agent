@@ -131,20 +131,37 @@ def get_ollama_models():
         return None
 
 
+def _ping_openai_endpoint(url, timeout=1.5):
+    """Check if a localhost URL responds like an OpenAI-compatible API."""
+    try:
+        req = urllib.request.Request(
+            url.rstrip("/") + "/models",
+            headers={"User-Agent": "ableton-agent", "Authorization": "Bearer not-needed"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 def detect_local_providers():
     """Scan localhost for running AI engines and return detected list."""
     detected = []
     for key, p in PROVIDERS.items():
         if p.get("is_local") and p.get("port"):
-            if check_port("127.0.0.1", p["port"]):
-                item = dict(p)
-                item["key"] = key
-                if key == "ollama":
-                    installed = get_ollama_models()
-                    if installed:
-                        item["models"] = installed
-                        item["default_model"] = installed[0]
-                detected.append(item)
+            if not check_port("127.0.0.1", p["port"]):
+                continue
+            # TCP open ≠ server alive; verify /v1/models actually responds
+            if not _ping_openai_endpoint(p["endpoint"]):
+                continue
+            item = dict(p)
+            item["key"] = key
+            if key == "ollama":
+                installed = get_ollama_models()
+                if installed:
+                    item["models"] = installed
+                    item["default_model"] = installed[0]
+            detected.append(item)
     return detected
 
 
