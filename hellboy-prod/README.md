@@ -3,7 +3,7 @@
 **Talk to your running music production session from your terminal.**
 
 Hellboy Prod connects a terminal coding agent (any MCP client) to a live
-DAW session. The agent gets ~95 tools to read the set and create or edit
+DAW session. The agent gets 99 tools to read the set and create or edit
 tracks, clips, MIDI notes, devices, automation, the mix, and a "quick loop"
 slice-and-shuffle generator — while you keep manual control and the project
 stays editable.
@@ -11,6 +11,17 @@ stays editable.
 ```
 agent  --stdio (MCP)-->  hellboy-bridge  --TCP/JSON-->  remote script  -->  DAW
 ```
+
+## Highlights
+
+- **Music theory built in**: `notes_detect_key`, `notes_scale_fit`,
+  `notes_chords` (diatonic progressions, triads to 9ths, inversions, open
+  voicings), `notes_arpeggiate`, and `notes_swing` with MPC-style presets
+  (`mpc_54` ... `mpc_71`, `house_shuffle`, `hiphop_lazy`, ...).
+  Octaves use Ableton's naming (C3 = MIDI 60).
+- **One call = one undo**: every agent command is a single Ctrl+Z in Live.
+- **Fails fast**: a dropped connection or an outdated remote script returns a
+  clear error with the fix, instead of hanging.
 
 ## Components
 

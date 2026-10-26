@@ -15,9 +15,11 @@ Hellboy Prod lets a terminal coding agent drive a live DAW session:
 
     agent --stdio(MCP)--> hellboy-bridge --TCP/JSON--> remote script --> DAW
 
-The agent gets ~95 tools: session state, tracks, clips, MIDI notes, devices,
-browser loading, automation envelopes, a mix report / auto balance pass and a
-"quick loop" slice-and-shuffle generator.
+The agent gets 99 tools: session state, tracks, clips, scenes, MIDI notes,
+music theory (key detection, scale fit, chord progressions, arpeggiator, MPC
+swing presets), devices, browser loading, automation envelopes, a mix report /
+auto balance pass and a "quick loop" slice-and-shuffle generator. Every call
+is one undo step in Live.
 
 Hard design rules:
   * The remote script uses ONLY the Python standard library.
@@ -193,11 +195,12 @@ The remote script itself never needs compiling: the DAW loads the .py files.
 
 Ideas that fit the existing seams with no refactor:
 
-  * scale / chord helpers: pure functions in hb_notes.py, then two tools
-  * a groove library: presets consumed by notes_shuffle_time
+  * DONE in 1.1: scale / chord helpers (notes_scale_fit, notes_chords,
+    notes_detect_key, notes_arpeggiate) and a groove library (notes_swing)
+  * DONE in 1.1: undo grouping - _dispatch wraps every call in
+    begin_undo_step / end_undo_step (Live 11+)
   * a session auto-arranger: loop over clips, call existing tools
   * a device preset scanner: browser_search + device_params
-  * undo grouping: wrap multi-step tools in session_undo markers
   * a second transport (OSC) in front of the same handler table
 
 Every new capability is: handler -> HANDLERS entry -> registry entry.

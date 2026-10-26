@@ -11,6 +11,13 @@ const track = z.number().int().describe("track index (negative counts from the e
 const slot = z.number().int().describe("clip slot index");
 const device = z.number().int().describe("device index on the track");
 const value01 = z.number().describe("normalised 0..1 value");
+const rootNote = z.string().default("C").describe("key root: C, C#, Db ... B");
+const scaleName = z
+  .enum([
+    "major", "minor", "harmonic_minor", "melodic_minor", "dorian", "phrygian", "lydian",
+    "mixolydian", "locrian", "pentatonic_major", "pentatonic_minor", "blues", "chromatic",
+  ])
+  .default("minor");
 
 const noteShape = z.object({
   pitch: z.number().int().min(0).max(127),
@@ -468,6 +475,78 @@ export const TOOLS: ToolDef[] = [
     description: "Apply a swing feel to note starts.",
     shape: { track, slot, amount: z.number().min(0).max(1).default(0.15), seed: z.number().int().default(0) },
     method: "notes_shuffle_time",
+  },
+
+  // -------------------------------------------------------------- theory
+  {
+    name: "notes_detect_key",
+    description: "Estimate the key of a MIDI clip (Krumhansl-Schmuckler, duration weighted). Returns the best key and runner-up candidates.",
+    shape: { track, slot, top: z.number().int().min(1).max(24).default(3) },
+    method: "notes_detect_key",
+  },
+  {
+    name: "notes_scale_fit",
+    description: "Snap every note of a MIDI clip into a key/scale.",
+    shape: {
+      track,
+      slot,
+      root: rootNote,
+      scale: scaleName,
+      direction: z.enum(["nearest", "up", "down"]).default("nearest"),
+    },
+    method: "notes_scale_fit",
+  },
+  {
+    name: "notes_chords",
+    description:
+      "Write a diatonic chord progression into a MIDI clip. progression is a list of 1-based scale degrees, e.g. [1,6,3,7] (i-VI-III-VII in minor).",
+    shape: {
+      track,
+      slot,
+      root: rootNote,
+      scale: scaleName,
+      progression: z.array(z.number().int().min(1).max(14)).min(1).max(64).default([1, 6, 3, 7]),
+      octave: z.number().int().min(-2).max(8).default(3).describe("Ableton octave numbering: C3 = MIDI 60"),
+      size: z.number().int().min(1).max(7).default(3).describe("3 = triads, 4 = sevenths, 5 = ninths"),
+      beats_per_chord: z.number().min(0.25).default(4),
+      velocity: z.number().int().min(1).max(127).default(96),
+      inversions: z.array(z.number().int().min(0).max(6)).optional().describe("inversion per chord"),
+      spread: z.boolean().default(false).describe("open voicing: raise the middle voice an octave"),
+      replace: z.boolean().default(true),
+    },
+    method: "notes_chords",
+  },
+  {
+    name: "notes_arpeggiate",
+    description: "Turn the held notes/chords of a MIDI clip into an arpeggio.",
+    shape: {
+      track,
+      slot,
+      rate: z.number().min(0.03125).default(0.25).describe("step length in beats (0.25 = 16ths)"),
+      style: z.enum(["up", "down", "updown", "random", "played"]).default("up"),
+      gate: z.number().min(0.05).max(1).default(0.8),
+      octaves: z.number().int().min(1).max(4).default(1),
+      seed: z.number().int().default(0),
+    },
+    method: "notes_arpeggiate",
+  },
+  {
+    name: "notes_swing",
+    description:
+      "MPC-style swing: push off-beat notes late. Use a preset or grid + amount (50-75 %).",
+    shape: {
+      track,
+      slot,
+      preset: z
+        .enum([
+          "straight", "mpc_54", "mpc_58", "mpc_62", "mpc_66", "mpc_71",
+          "eighth_swing", "triplet_eighth", "house_shuffle", "hiphop_lazy",
+        ])
+        .optional(),
+      grid: z.number().min(0.0625).default(0.25).describe("0.25 = 16ths, 0.5 = 8ths"),
+      amount: z.number().min(50).max(75).default(58),
+    },
+    method: "notes_swing",
   },
 
   // ------------------------------------------------------------- devices

@@ -102,6 +102,13 @@ class Song(object):
         self.scenes = []
         self.master_track = Track("Master")
         self.view = types.SimpleNamespace(selected_track=self.tracks[0])
+        self.undo_steps = []
+
+    def begin_undo_step(self):
+        self.undo_steps.append("begin")
+
+    def end_undo_step(self):
+        self.undo_steps.append("end")
 
 
 def install_fakes():
@@ -218,6 +225,63 @@ class RemoteScriptTest(unittest.TestCase):
         result = self.call("device_set_param", track=0, device=0, name="Cutoff",
                            value=0.5, normalized=True)
         self.assertAlmostEqual(result["value"], 10010.0)
+
+    # ------------------------------------------------------------ theory
+    def notes(self, track=0, slot=0):
+        return sorted(self.call("notes_get", track=track, slot=slot)["notes"],
+                      key=lambda n: (n["start"], n["pitch"]))
+
+    def test_chords_write_diatonic_progression(self):
+        self.call("clip_create", track=0, slot=0, length=16)
+        result = self.call("notes_chords", track=0, slot=0, root="A", scale="minor",
+                           progression=[1, 6, 3, 7], octave=3)
+        self.assertEqual([c["notes"] for c in result["chords"]], [
+            ["A3", "C4", "E4"], ["F4", "A4", "C5"], ["C4", "E4", "G4"], ["G4", "B4", "D5"]])
+        self.assertEqual(self.notes()[0]["pitch"], 69)  # A3 in Ableton = MIDI 69
+        self.assertEqual(result["written"], 12)
+        sevenths = self.call("notes_chords", track=0, slot=0, root="C", scale="major",
+                             progression=[2], size=4)
+        self.assertEqual(sevenths["chords"][0]["notes"], ["D3", "F3", "A3", "C4"])
+
+    def test_detect_key_finds_a_minor(self):
+        self.call("clip_create", track=0, slot=0, length=16)
+        self.call("notes_chords", track=0, slot=0, root="A", scale="minor",
+                  progression=[1, 4, 5, 1])
+        self.assertEqual(self.call("notes_detect_key", track=0, slot=0)["key"]["root"], "A")
+
+    def test_scale_fit_snaps_out_of_key_notes(self):
+        self.call("clip_create", track=0, slot=0, length=4)
+        self.call("notes_set", track=0, slot=0, notes=[
+            {"pitch": 61, "start": 0, "dur": 1}, {"pitch": 64, "start": 1, "dur": 1}])
+        result = self.call("notes_scale_fit", track=0, slot=0, root="C", scale="major")
+        self.assertEqual(result["moved"], 1)
+        self.assertEqual([n["pitch"] for n in self.notes()], [60, 64])
+
+    def test_swing_moves_only_offbeats(self):
+        self.call("clip_create", track=0, slot=0, length=1)
+        self.call("notes_set", track=0, slot=0, notes=[
+            {"pitch": 42, "start": i * 0.25, "dur": 0.1} for i in range(4)])
+        self.call("notes_swing", track=0, slot=0, preset="mpc_66")
+        starts = [n["start"] for n in self.notes()]
+        self.assertAlmostEqual(starts[0], 0.0)
+        self.assertAlmostEqual(starts[1], 0.33, places=2)
+        self.assertAlmostEqual(starts[2], 0.5)
+
+    def test_arpeggiate_turns_a_chord_into_steps(self):
+        self.call("clip_create", track=0, slot=0, length=1)
+        self.call("notes_set", track=0, slot=0, notes=[
+            {"pitch": p, "start": 0, "dur": 1} for p in (60, 64, 67)])
+        self.call("notes_arpeggiate", track=0, slot=0, rate=0.25, style="up")
+        self.assertEqual([n["pitch"] for n in self.notes()], [60, 64, 67, 60])
+
+    def test_each_call_is_one_undo_step(self):
+        self.song.undo = lambda: None
+        self.call("session_set_tempo", tempo=128)
+        self.call("session_undo")  # must not open an undo step of its own
+        self.assertEqual(self.song.undo_steps, ["begin", "end"])
+        with self.assertRaises(ValueError):
+            self.call("notes_get", track=0, slot=0)  # empty slot still closes the step
+        self.assertEqual(self.song.undo_steps, ["begin", "end", "begin", "end"])
 
     def test_unknown_method_is_an_error_not_a_crash(self):
         with self.assertRaises(NameError):

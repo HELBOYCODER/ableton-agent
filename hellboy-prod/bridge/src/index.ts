@@ -3,10 +3,21 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { live } from "./live-client";
 import { TOOLS } from "./registry";
 
-const server = new McpServer({
-  name: "hellboy",
-  version: "1.0.0",
-});
+const server = new McpServer(
+  {
+    name: "hellboy",
+    version: "1.1.0",
+  },
+  {
+    instructions:
+      "Hellboy Prod drives a running Ableton Live set. Start with session_state to learn " +
+      "track, slot and scene indices (0-based; negative counts from the end). Every call is " +
+      "one undo step in Live (session_undo reverts it). Browser loads go to the selected " +
+      "track. For harmony use notes_detect_key, then notes_chords / notes_scale_fit / " +
+      "notes_arpeggiate; for groove use notes_swing presets. mix_balance needs the " +
+      "transport playing.",
+  },
+);
 
 function log(message: string): void {
   process.stderr.write(`[hellboy] ${message}\n`);
@@ -30,7 +41,12 @@ for (const definition of TOOLS) {
         const result = await live.call(definition.method, params);
         return asText(result);
       } catch (error) {
-        const message = (error as Error).message || String(error);
+        let message = (error as Error).message || String(error);
+        if (message.includes("UnknownMethod")) {
+          message += " - the remote script in Live is older than this bridge; re-run the installer and restart Live";
+        } else if (/ECONNREFUSED|not connected/.test(message)) {
+          message += " - open Live and select Hellboy Prod as a Control Surface (Preferences -> Link/MIDI)";
+        }
         return {
           content: [{ type: "text" as const, text: `hellboy error: ${message}` }],
           isError: true,

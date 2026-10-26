@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { fork, type ChildProcess } from "node:child_process";
+import net from "node:net";
 import path from "node:path";
 
 import { LiveClient } from "../src/live-client";
@@ -86,4 +87,24 @@ test("unknown method rejects with a useful message", async () => {
 test("deferred method resolves", async () => {
   const result = await client.call("mix_balance", { samples: 1, interval: 1 });
   assert.ok(result === null || typeof result === "object");
+});
+
+test("theory tools are exposed by the remote end", async () => {
+  const info = await client.hello();
+  for (const method of ["notes_chords", "notes_detect_key", "notes_swing", "scene_fire"]) {
+    assert.ok(info.methods.includes(method), method);
+  }
+});
+
+test("a dropped connection fails in-flight calls immediately", async () => {
+  // a server that accepts a request and hangs up without answering
+  const server = net.createServer((socket) => socket.once("data", () => socket.destroy()));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as net.AddressInfo;
+  const flaky = new LiveClient("127.0.0.1", port, 20000);
+  const started = Date.now();
+  await assert.rejects(() => flaky.call("session_state"), /closed/);
+  assert.ok(Date.now() - started < 2000, "should not wait for the timeout");
+  flaky.close();
+  server.close();
 });

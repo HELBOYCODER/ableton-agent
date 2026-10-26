@@ -1,6 +1,6 @@
 {
   "name": "hellboy-prod",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "A terminal agent bridge for a running music production session.",
   "license": "MIT",

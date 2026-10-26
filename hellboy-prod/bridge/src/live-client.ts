@@ -50,7 +50,14 @@ export class LiveClient {
         socket.on("error", () => undefined);
         socket.on("data", (chunk: Buffer) => this.consume(chunk));
         socket.on("close", () => {
-          if (this.socket === socket) this.socket = null;
+          if (this.socket !== socket) return;
+          this.socket = null;
+          this.buffer = "";
+          // fail in-flight calls now instead of waiting for their timeout
+          for (const [id, resolver] of this.pending) {
+            this.pending.delete(id);
+            resolver({ id, ok: false, error: `connection to ${this.endpoint} closed (is Live still running?)` });
+          }
         });
         this.socket = socket;
         resolve();
@@ -119,7 +126,7 @@ export class LiveClient {
   }
 
   async hello(): Promise<any> {
-    return this.call("hello", { client: "bridge", version: "1.0.0" });
+    return this.call("hello", { client: "bridge", version: "1.1.0" });
   }
 
   async ping(): Promise<boolean> {

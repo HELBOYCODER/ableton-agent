@@ -155,18 +155,26 @@ def _fold(ctx, index=0, folded=True, **kw):
     return {"ok": True, "index": index, "folded": bool(track.fold_state)}
 
 
-def _freeze(ctx, index=0, **kw):
+def _set_frozen(ctx, index, frozen):
     track = U.track_at(ctx.song_ref, index)
-    if not track.can_be_frozen:
+    if frozen and not getattr(track, "can_be_frozen", False):
         return {"ok": False, "reason": "track cannot be frozen"}
-    track.is_frozen = True
-    return {"ok": True, "index": index}
+    try:
+        track.is_frozen = frozen
+    except (AttributeError, RuntimeError):
+        # is_frozen is read-only in the Live Object Model of current versions
+        return {"ok": False, "is_frozen": bool(getattr(track, "is_frozen", False)),
+                "reason": "this Live version does not allow scripts to (un)freeze; "
+                          "use Freeze Track in the track context menu"}
+    return {"ok": True, "index": index, "is_frozen": bool(track.is_frozen)}
+
+
+def _freeze(ctx, index=0, **kw):
+    return _set_frozen(ctx, index, True)
 
 
 def _unfreeze(ctx, index=0, **kw):
-    track = U.track_at(ctx.song_ref, index)
-    track.is_frozen = False
-    return {"ok": True, "index": index}
+    return _set_frozen(ctx, index, False)
 
 
 HANDLERS = {

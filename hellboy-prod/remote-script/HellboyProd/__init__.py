@@ -42,6 +42,9 @@ API_VERSION = 1
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8971
 
+# Methods that must not be wrapped in an undo step of their own.
+NO_UNDO_GROUP = frozenset(("session_undo", "session_redo", "hello", "ping", "shutdown"))
+
 MODULES = (
     hb_tracks, hb_clips, hb_notes, hb_devices, hb_browser,
     hb_automation, hb_mix, hb_quickloop, hb_license,
@@ -187,11 +190,22 @@ class HellboyProd(ControlSurface):
 
     def _dispatch(self, method, params):
         if method in self._builtins:
-            return self._builtins[method](params)
-        handler = self._handlers.get(method)
-        if handler is None:
-            raise NameError("UnknownMethod: %s" % method)
-        return handler(self, **params)
+            call = lambda: self._builtins[method](params)
+        else:
+            handler = self._handlers.get(method)
+            if handler is None:
+                raise NameError("UnknownMethod: %s" % method)
+            call = lambda: handler(self, **params)
+        # One agent call = one undo step in Live (Live 11+ exposes the markers).
+        song = self.song()
+        grouped = method not in NO_UNDO_GROUP and hasattr(song, "begin_undo_step")
+        if grouped:
+            song.begin_undo_step()
+        try:
+            return call()
+        finally:
+            if grouped:
+                song.end_undo_step()
 
     # ----------------------------------------------------------------- builtins
     def _build_builtins(self):

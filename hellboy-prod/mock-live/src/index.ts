@@ -50,6 +50,7 @@ const METHODS = [
   "notes_get", "notes_stats", "notes_set", "notes_add", "notes_clear",
   "notes_transpose", "notes_velocity", "notes_length_scale", "notes_range",
   "notes_quantize", "notes_humanize", "notes_legato", "notes_shuffle_time",
+  "notes_detect_key", "notes_scale_fit", "notes_chords", "notes_arpeggiate", "notes_swing",
   "device_list", "device_params", "device_get_param", "device_set_param",
   "device_set_active", "device_delete", "device_move", "device_chains",
   "device_chain_devices", "device_add",

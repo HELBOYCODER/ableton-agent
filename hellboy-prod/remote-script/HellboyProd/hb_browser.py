@@ -3,6 +3,8 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
+from collections import deque
+
 import Live
 from . import hb_util as U
 
@@ -78,9 +80,9 @@ def _children(ctx, path="", depth=1, limit=500, **kw):
 
     item = resolve(ctx, path)
     results = []
-    queue = [(item, path, 0)]
+    queue = deque([(item, path, 0)])
     while queue and len(results) < limit:
-        current, current_path, level = queue.pop(0)
+        current, current_path, level = queue.popleft()
         if level >= U.as_int(depth, 1):
             continue
         for child in current.children:
@@ -105,9 +107,9 @@ def _search(ctx, query="", limit=25, categories=None, loadable_only=True, **kw):
         root = getattr(node, root_name, None)
         if root is None:
             continue
-        queue = [(root, root_name, 0)]
+        queue = deque([(root, root_name, 0)])
         while queue and len(results) < limit and visited < MAX_SEARCH_NODES:
-            current, current_path, level = queue.pop(0)
+            current, current_path, level = queue.popleft()
             visited += 1
             if level >= MAX_SEARCH_DEPTH:
                 continue
