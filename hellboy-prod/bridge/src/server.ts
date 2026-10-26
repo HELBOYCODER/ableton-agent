@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { LiveClient, live } from "./live-client";
 import { TOOLS } from "./registry";
 
-export const VERSION = "1.3.0";
+export const VERSION = "1.4.0";
 
 export const INSTRUCTIONS =
   "Hellboy Prod drives a running Ableton Live set. Start with session_state to learn " +

@@ -24,6 +24,7 @@ Download from the latest release:
 | macOS (Apple silicon) | `HellboyStudio-macOS-arm64.zip` |
 | macOS (Intel) | `HellboyStudio-macOS-x64.zip` |
 | Windows 10/11 | `hellboy-studio-win-x64.exe` |
+| Command line (any platform) | `hellboy-<platform>` - see [Command line](#command-line-hellboy) |
 
 1. Open the app. It opens in your browser (a private page on your own computer).
 2. **Setup -> Install** copies the Live script into your User Library.
@@ -60,6 +61,44 @@ On Windows, SmartScreen may ask once: **More info -> Run anyway**.
 The app runs in the background with no window of its own; it closes itself a
 few minutes after its last browser tab closes. Open it again any time; a second
 launch just brings the page back.
+
+## Command line: `hellboy`
+
+For the terminal, servers and scripts there is a CLI next to the app
+(`hellboy-darwin-arm64`, `hellboy-darwin-x64`, `hellboy-win-x64.exe` in the
+release; rename it to `hellboy` and put it on your PATH).
+
+```bash
+hellboy status                       # Live connection, script install state
+hellboy install                      # copy the Live script
+hellboy play | stop | undo | redo
+hellboy tempo 124
+hellboy tools chord                  # list tools (filter optional)
+hellboy call notes_chords track=0 slot=0 root=A scale=minor progression=[1,6,3,7]
+hellboy chat "make the drums swing like MPC 58"   # or just: hellboy chat
+hellboy config --key sk-ant-...      # API key for the assistant
+hellboy connect claude               # register the MCP bridge with Claude Code
+```
+
+### Manage it from the web
+
+```bash
+hellboy serve                        # web panel on http://127.0.0.1:7777 (no app window)
+hellboy serve --lan --token my-long-secret
+```
+
+`serve` runs the same web panel as Hellboy Studio without opening a window, so
+it suits a studio computer you control from elsewhere. With `--lan`, phones,
+tablets and other computers on your network can open it (the printed link
+includes the token). The **Console** tab runs any tool with the same syntax as
+`hellboy call`.
+
+Another machine can also send CLI commands to it:
+
+```bash
+hellboy tempo 128 --server http://studio.local:7777 --token my-long-secret
+# or: export HELLBOY_SERVER=http://studio.local:7777 HELLBOY_TOKEN=my-long-secret
+```
 
 ## Use it from a coding agent
 

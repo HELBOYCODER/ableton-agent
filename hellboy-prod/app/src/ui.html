@@ -220,6 +220,7 @@ ol.howto b { color: var(--text); }
     <button data-view="arrange"><svg viewBox="0 0 24 24"><path d="M3 6h7M13 6h8M3 12h11M17 12h4M3 18h4M10 18h11"/></svg>Arrange</button>
     <button data-view="sounds"><svg viewBox="0 0 24 24"><path d="M3 12h2l2-6 4 14 3-10 2 4h5"/></svg>Sounds</button>
     <button data-view="assistant"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Assistant</button>
+    <button data-view="console"><svg viewBox="0 0 24 24"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Console</button>
     <button data-view="setup"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Setup</button>
     <div class="foot">Every change is one Undo in Live.</div>
   </nav>
@@ -414,6 +415,19 @@ ol.howto b { color: var(--text); }
       </div>
     </section>
 
+    <!-- ======================= CONSOLE ======================= -->
+    <section class="view" id="view-console">
+      <h1>Console</h1>
+      <p class="lead">Run any of the tools directly, with the same syntax as the <code>hellboy</code> command line.</p>
+      <form class="row" id="cmdForm">
+        <input type="text" id="cmd" list="toolNames" placeholder="notes_chords track=0 slot=0 root=A progression=[1,6,3,7]" style="flex:1; min-width:240px; font-family:var(--mono)" autocomplete="off" spellcheck="false">
+        <datalist id="toolNames"></datalist>
+        <button class="btn primary" type="submit">Run</button>
+      </form>
+      <div class="muted" id="cmdHelp" style="margin-top:8px; font-size:13px"></div>
+      <div class="list" id="cmdLog" style="max-height:none"></div>
+    </section>
+
     <!-- ======================= SETUP ======================= -->
     <section class="view" id="view-setup">
       <h1>Setup</h1>
@@ -547,6 +561,7 @@ function show(view) {
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
   if (view === "arrange") loadArrangement();
   if (view === "sounds") loadChain();
+  if (view === "console") { loadTools().catch(() => {}); $("cmd").focus(); }
   if (view === "setup") refreshStatus();
   if (view === "assistant") $("prompt").focus();
   refreshSession();
@@ -880,6 +895,60 @@ $("chain").onclick = (e) => {
   const track = state.selected.track;
   if (on) act(on, async () => { await live("device_set_active", { track, device: +on.dataset.bypass, active: on.dataset.on !== "1" }); loadChain(); });
   if (del) act(del, async () => { await live("device_delete", { track, device: +del.dataset.del }); toast("Device deleted - Undo brings it back"); loadChain(); });
+};
+
+// ---------------------------------------------------------------- console
+let toolList = [];
+async function loadTools() {
+  if (toolList.length) return;
+  toolList = await api("/api/tools");
+  $("toolNames").innerHTML = toolList.map((t) => `<option value="${esc(t.name)} ">`).join("");
+}
+function parseCommand(line) {
+  const trimmed = line.trim();
+  const space = trimmed.indexOf(" ");
+  const name = space < 0 ? trimmed : trimmed.slice(0, space);
+  const rest = space < 0 ? "" : trimmed.slice(space + 1).trim();
+  let params = {};
+  if (rest.startsWith("{")) params = JSON.parse(rest);
+  else if (rest) {
+    // key=value pairs; values may be JSON ([1,6,3,7], true, 0.5) or bare words
+    for (const pair of rest.match(/[^\s=]+=("[^"]*"|\[[^\]]*\]|\{[^}]*\}|\S+)/g) || []) {
+      const cut = pair.indexOf("=");
+      const raw = pair.slice(cut + 1);
+      try { params[pair.slice(0, cut)] = JSON.parse(raw); } catch { params[pair.slice(0, cut)] = raw; }
+    }
+  }
+  return { name, params };
+}
+$("cmd").addEventListener("input", () => {
+  const name = $("cmd").value.trim().split(/\s+/)[0];
+  const tool = toolList.find((t) => t.name === name);
+  $("cmdHelp").innerHTML = tool ? `${esc(tool.description)}<br><code>${tool.params.map((p) => esc(p.optional ? `[${p.name}]` : p.name)).join(" ") || "no parameters"}</code>` : "";
+});
+$("cmdForm").onsubmit = (e) => {
+  e.preventDefault();
+  const line = $("cmd").value.trim();
+  if (!line) return;
+  const entry = document.createElement("div");
+  entry.className = "item";
+  entry.style.cssText = "flex-direction:column; align-items:stretch";
+  entry.innerHTML = `<div class="row"><code style="flex:1">${esc(line)}</code><button class="btn sm ghost" type="button">Again</button></div><div class="result" style="margin-top:6px">…</div>`;
+  entry.querySelector("button").onclick = () => { $("cmd").value = line; $("cmdForm").requestSubmit(); };
+  $("cmdLog").prepend(entry);
+  const out = entry.querySelector(".result");
+  (async () => {
+    try {
+      const { name, params } = parseCommand(line);
+      const reply = await api("/api/call", { method: name, params });
+      out.textContent = reply.ok ? JSON.stringify(reply.result, null, 2) : reply.error;
+      out.style.color = reply.ok ? "" : "var(--bad)";
+      refreshSession();
+    } catch (error) {
+      out.textContent = error.message; out.style.color = "var(--bad)";
+    }
+  })();
+  $("cmd").value = ""; $("cmdHelp").textContent = "";
 };
 
 // ---------------------------------------------------------------- assistant
