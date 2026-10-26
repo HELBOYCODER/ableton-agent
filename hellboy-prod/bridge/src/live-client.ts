@@ -126,7 +126,7 @@ export class LiveClient {
   }
 
   async hello(): Promise<any> {
-    return this.call("hello", { client: "bridge", version: "1.3.0" });
+    return this.call("hello", { client: "bridge", version: "1.4.0" });
   }
 
   async ping(): Promise<boolean> {

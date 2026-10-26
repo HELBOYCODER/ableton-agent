@@ -1,6 +1,6 @@
 {
   "name": "@hellboy/mock-live",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Fake Live Object Model server used by the CI test suite.",
   "license": "MIT",

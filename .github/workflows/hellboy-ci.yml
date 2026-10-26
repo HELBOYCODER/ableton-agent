@@ -66,4 +66,5 @@ jobs:
             hellboy-prod/bridge/build/bridge.cjs
             hellboy-prod/installer/build/installer.cjs
             hellboy-prod/app/build/app.cjs
+            hellboy-prod/app/build/cli.cjs
           if-no-files-found: error

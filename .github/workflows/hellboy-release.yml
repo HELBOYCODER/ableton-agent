@@ -55,6 +55,7 @@ jobs:
           npx pkg bridge/build/bridge.cjs --targets ${{ matrix.target }} --output dist/hellboy-bridge-${{ matrix.platform }}${{ matrix.ext }}
           npx pkg installer/build/installer.cjs --targets ${{ matrix.target }} --output dist/hellboy-installer-${{ matrix.platform }}${{ matrix.ext }}
           npx pkg app/build/app.cjs --targets ${{ matrix.target }} --output dist/hellboy-studio-${{ matrix.platform }}${{ matrix.ext }}
+          npx pkg app/build/cli.cjs --targets ${{ matrix.target }} --output dist/hellboy-${{ matrix.platform }}${{ matrix.ext }}
 
       - name: Windows - no console window for Hellboy Studio
         if: runner.os == 'Windows'
@@ -64,11 +65,13 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           for f in bridge installer studio; do codesign --force --sign - dist/hellboy-$f-${{ matrix.platform }}; done
+          codesign --force --sign - dist/hellboy-${{ matrix.platform }}
 
       - name: Smoke test the compiled Studio
         run: |
           npm run build -w mock-live
           HELLBOY_APP_BIN=dist/hellboy-studio-${{ matrix.platform }}${{ matrix.ext }} node --test app/test/app.test.js
+          HELLBOY_CLI_BIN=dist/hellboy-${{ matrix.platform }}${{ matrix.ext }} node --test app/test/cli.test.js
 
       - name: macOS - build Hellboy Studio.app
         if: runner.os == 'macOS'
@@ -106,6 +109,7 @@ jobs:
           else
             echo "name=hellboy-v$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
           fi
+          echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
 
       - name: Collect and package
         run: |
@@ -120,6 +124,6 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           target_commitish: ${{ github.sha }}
-          name: Hellboy Prod ${{ steps.tag.outputs.name }}
+          name: Hellboy Prod ${{ steps.tag.outputs.version }}
           files: hellboy-prod/dist/*
           generate_release_notes: true

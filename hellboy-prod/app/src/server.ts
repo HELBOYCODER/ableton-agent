@@ -30,6 +30,10 @@ export interface AppServerOptions {
   bridge: BridgeCommand;
   onActivity: () => void;
   onQuit: () => void;
+  /** Accept any Host header (phones and other computers on the network). The token still guards every call. */
+  lan?: boolean;
+  /** Fixed token instead of a random per-launch one (hellboy serve --token). */
+  token?: string;
 }
 
 class HttpError extends Error {
@@ -69,7 +73,7 @@ function send(res: http.ServerResponse, status: number, payload: unknown): void 
 }
 
 export function createAppServer(options: AppServerOptions) {
-  const token = crypto.randomBytes(24).toString("hex");
+  const token = options.token || crypto.randomBytes(24).toString("hex");
   const { live } = options;
   const assistant = new Assistant(live, loadSettings);
   let port = 0;
@@ -106,7 +110,17 @@ export function createAppServer(options: AppServerOptions) {
       mcp: options.bridge,
     }),
 
-    "GET /api/tools": async () => TOOLS.map(({ name, description, method }) => ({ name, description, method })),
+    "GET /api/tools": async () =>
+      TOOLS.map(({ name, description, method, shape }) => ({
+        name,
+        description,
+        method,
+        params: Object.entries(shape).map(([key, schema]) => ({
+          name: key,
+          optional: schema.isOptional(),
+          description: schema.description || null,
+        })),
+      })),
 
     "POST /api/call": async (req) => {
       const { method, params } = await readJson(req);
@@ -210,8 +224,12 @@ export function createAppServer(options: AppServerOptions) {
   const server = http.createServer(async (req, res) => {
     try {
       // Only loopback names: blocks DNS-rebinding pages from reaching the API.
+      // LAN mode serves other devices, so any host name is allowed and the
+      // token alone (never in a cookie, never sent automatically) guards it.
       const host = req.headers.host || "";
-      if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) throw new HttpError(403, "bad host");
+      if (!options.lan && host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) {
+        throw new HttpError(403, "bad host");
+      }
       const url = new URL(req.url || "/", `http://${host}`);
 
       if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
@@ -253,10 +271,10 @@ export function createAppServer(options: AppServerOptions) {
   return {
     token,
     server,
-    listen(requestedPort = 0): Promise<number> {
+    listen(requestedPort = 0, host = "127.0.0.1"): Promise<number> {
       return new Promise((resolve, reject) => {
         server.once("error", reject);
-        server.listen(requestedPort, "127.0.0.1", () => {
+        server.listen(requestedPort, host, () => {
           port = (server.address() as { port: number }).port;
           resolve(port);
         });
