@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "build": "npm run build -w mock-live && npm run build -w bridge && npm run build -w installer && npm run build -w app",
-    "test": "npm run build -w mock-live && npm run build -w bridge && npm run build -w app && node --test \"bridge/dist/test/**/*.test.js\" \"app/test/*.test.js\"",
+    "test": "npm run build -w mock-live && npm run build -w bridge && npm run build -w app && node --test bridge/dist/test/roundtrip.test.js app/test/app.test.js",
     "test:py": "python -m unittest discover -s remote-script/tests",
     "lint:py": "python -m compileall -q remote-script",
     "bundle": "npm run bundle -w bridge && npm run bundle -w installer && npm run bundle -w app",
