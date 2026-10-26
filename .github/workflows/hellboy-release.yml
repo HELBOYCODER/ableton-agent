@@ -93,6 +93,17 @@ jobs:
         with:
           path: hellboy-prod/artifacts
 
+      - name: Release tag
+        id: tag
+        # a tag push uses that tag; a manual run tags this commit with the
+        # version in hellboy-prod/package.json
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "name=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=hellboy-v$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Collect and package
         run: |
           mkdir -p dist hellboyprod-remote-script
@@ -104,5 +115,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          name: Hellboy Prod ${{ steps.tag.outputs.name }}
           files: hellboy-prod/dist/*
           generate_release_notes: true
