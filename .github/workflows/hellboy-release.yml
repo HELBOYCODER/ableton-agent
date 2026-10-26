@@ -47,6 +47,9 @@ jobs:
       - run: npm ci
       - run: npm run bundle
 
+      - name: Fetch pkg base binaries (checksum-verified, never build Node from source)
+        run: node app/scripts/pkg-prefetch.mjs ${{ matrix.target }}
+
       - name: Compile bridge, installer and Hellboy Studio
         run: |
           npx pkg bridge/build/bridge.cjs --targets ${{ matrix.target }} --output dist/hellboy-bridge-${{ matrix.platform }}${{ matrix.ext }}
