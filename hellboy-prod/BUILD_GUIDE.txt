@@ -15,11 +15,18 @@ Hellboy Prod lets a terminal coding agent drive a live DAW session:
 
     agent --stdio(MCP)--> hellboy-bridge --TCP/JSON--> remote script --> DAW
 
-The agent gets 99 tools: session state, tracks, clips, scenes, MIDI notes,
+The agent gets 117 tools: session state, tracks, clips, scenes, MIDI notes,
 music theory (key detection, scale fit, chord progressions, arpeggiator, MPC
-swing presets), devices, browser loading, automation envelopes, a mix report /
-auto balance pass and a "quick loop" slice-and-shuffle generator. Every call
-is one undo step in Live.
+swing presets), the Arrangement View and locators (with a scene auto-arranger),
+devices, browser loading, automation envelopes, a mix report / auto balance
+pass and a "quick loop" slice-and-shuffle generator. Every call is one undo
+step in Live.
+
+Three ways in, one handler table:
+
+    Hellboy Studio (browser UI) --HTTP--> app --TCP/JSON--+
+    agent --stdio(MCP)--> bridge (or app --mcp) ---------+--> remote script
+    OSC controller --UDP 8972------------------------------+
 
 Hard design rules:
   * The remote script uses ONLY the Python standard library.
@@ -37,6 +44,9 @@ Hard design rules:
     bridge/                      TypeScript MCP server (stdio)
     installer/                   Cross-platform installer
     mock-live/                   Fake DAW server for CI
+    app/                         Hellboy Studio: local web UI + assistant +
+                                 installer + MCP bridge in one binary
+    docs/DESIGN-1.2.md           Design of the 1.2 release
     ../.github/workflows/hellboy-*.yml   CI + release (at the repo root)
     .mcp.json                    Project level MCP registration
     BUILD_GUIDE.txt              This file
@@ -96,6 +106,7 @@ else changes.
     npm test               # spins up mock-live, exercises the bridge
     npm run test:py        # loads the remote script as Live does, fake LOM
     npm run lint:py        # byte-compile the remote script
+    npm run studio         # run Hellboy Studio from source
     npm run bundle         # produce bridge/build/bridge.cjs + installer cjs
 
 Run the bridge against the fake DAW without a DAW:
@@ -122,6 +133,8 @@ Install for real use:
 6. RUNNING INSIDE THE DAW
 --------------------------------------------------------------------------
 
+Easiest: open Hellboy Studio and use Setup -> Install. From source:
+
 1. npm install && npm run build && npm run bundle
 2. node installer/dist/index.js install
 3. Open the DAW.
@@ -147,6 +160,12 @@ Local:
     npx pkg bridge/build/bridge.cjs --targets node20-win-x64 \
         --output dist/hellboy-bridge-win-x64.exe
 
+Hellboy Studio is compiled the same way from app/build/app.cjs. Then:
+
+    node app/scripts/win-gui.mjs dist/hellboy-studio-win-x64.exe   # no console window
+    node app/scripts/mac-app.mjs dist/hellboy-studio-darwin-arm64 dist 1.2.0
+    codesign --force --deep --sign - "dist/Hellboy Studio.app"
+
 `pkg` here is the maintained @yao-pkg/pkg fork (a devDependency); the
 original vercel pkg has no node20 targets.
 
@@ -157,14 +176,17 @@ macOS binaries must be ad-hoc signed or Gatekeeper quarantines them:
 On GitHub, .github/workflows/hellboy-release.yml (repo root) already does all of this:
 
   * matrix over macos-14 (arm64), macos-15-intel (x64), windows-latest (x64)
-  * npm ci, npm run bundle, pkg per target, codesign on macOS
-  * uploads artifacts, then publishes a release with binaries, the zipped
-    remote script and SHA256SUMS.txt
+  * npm ci, npm run bundle, pkg per target (bridge, installer, studio)
+  * codesign on macOS, GUI subsystem patch on Windows
+  * runs the Studio end-to-end tests against each compiled binary
+  * builds and signs "Hellboy Studio.app" (HellboyStudio-macOS-<arch>.zip)
+  * publishes a release with binaries, the app zips, the zipped remote script
+    and SHA256SUMS.txt
 
 Trigger it:
 
-    git tag hellboy-v1.0.0
-    git push origin hellboy-v1.0.0
+    git tag hellboy-v1.2.0
+    git push origin hellboy-v1.2.0
 
 (The hellboy- prefix keeps it apart from the Python package's v* releases.)
 
@@ -185,7 +207,9 @@ The remote script itself never needs compiling: the DAW loads the .py files.
 [ ] npm run test:py and npm run lint:py clean
 [ ] .mcp.json has the correct relative bridge path
 [ ] installer status prints sane paths on macOS and Windows
-[ ] tag pushed, release contains 6 binaries + remote script zip + checksums
+[ ] tag pushed, release contains 8 binaries + 2 macOS app zips + remote
+    script zip + checksums
+[ ] Hellboy Studio opens from a double click on macOS and Windows
 [ ] README quickstart verified on a clean machine
 
 
@@ -199,9 +223,13 @@ Ideas that fit the existing seams with no refactor:
     notes_detect_key, notes_arpeggiate) and a groove library (notes_swing)
   * DONE in 1.1: undo grouping - _dispatch wraps every call in
     begin_undo_step / end_undo_step (Live 11+)
-  * a session auto-arranger: loop over clips, call existing tools
+  * DONE in 1.2: session auto-arranger (arrangement_from_scenes), Arrangement
+    View tools and locators (hb_arrangement.py)
+  * DONE in 1.2: a second transport (OSC, hb_osc.py) in front of the same
+    handler table
+  * DONE in 1.2: Hellboy Studio desktop app (app/)
   * a device preset scanner: browser_search + device_params
-  * a second transport (OSC) in front of the same handler table
+  * OSC push: Live listeners that send tempo/playing changes to controllers
 
 Every new capability is: handler -> HANDLERS entry -> registry entry.
 
@@ -227,3 +255,15 @@ Nothing loads from browser_load
 
 mix_balance does nothing
     Meters are instantaneous. Start the transport, then call it again.
+
+Hellboy Studio does not open / shows "missing or wrong token"
+    Open it from the app icon, not from an old browser tab: every launch makes
+    a new private link. Logs are in ~/.hellboy/app.log.
+
+"needs Live 12 or newer"
+    Creating or deleting arrangement clips uses Live 12 API. On Live 11 use
+    arrangement_place_clip / arrangement_from_scenes, which copy Session clips.
+
+OSC does nothing
+    OSC binds 127.0.0.1:8972. For a phone or tablet set HELLBOY_OSC_HOST=0.0.0.0
+    (and HELLBOY_OSC_REPLY_PORT to the controller's receive port).

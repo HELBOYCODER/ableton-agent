@@ -9,6 +9,7 @@ import json
 import os
 import re
 import socket
+import struct
 import sys
 import time
 import types
@@ -38,6 +39,12 @@ class Clip(object):
         self.name = ""
         self.is_midi_clip = True
         self.notes = []
+        self.start_time = 0.0
+        self.looping = True
+
+    @property
+    def end_time(self):
+        return self.start_time + self.length
 
     def get_notes_extended(self, pitch, pitch_span, start, span):
         return [n for n in self.notes
@@ -89,6 +96,27 @@ class Track(object):
         self.devices = [Device("Filter")]
         self.clip_slots = [Slot() for _ in range(4)]
         self.color_index = 0
+        self.arrangement_clips = []
+
+    def duplicate_clip_to_arrangement(self, clip, time):
+        copy = Clip(clip.length)
+        copy.name, copy.start_time = clip.name, float(time)
+        copy.notes = list(clip.notes)
+        self.arrangement_clips.append(copy)
+
+    def create_midi_clip(self, time, length):
+        clip = Clip(length)
+        clip.start_time = float(time)
+        self.arrangement_clips.append(clip)
+        return clip
+
+    def delete_clip(self, clip):
+        self.arrangement_clips.remove(clip)
+
+
+class Cue(object):
+    def __init__(self, time):
+        self.time, self.name = time, ""
 
 
 class Song(object):
@@ -99,7 +127,11 @@ class Song(object):
         self.is_playing = False
         self.tracks = [Track("Drums"), Track("Bass")]
         self.return_tracks = []
-        self.scenes = []
+        self.scenes = [types.SimpleNamespace(name="Intro"), types.SimpleNamespace(name="Drop")]
+        self.cue_points = []
+        self.current_song_time = 0.0
+        self.record_mode = False
+        self.loop, self.loop_start, self.loop_length = False, 0.0, 16.0
         self.master_track = Track("Master")
         self.view = types.SimpleNamespace(selected_track=self.tracks[0])
         self.undo_steps = []
@@ -109,6 +141,13 @@ class Song(object):
 
     def end_undo_step(self):
         self.undo_steps.append("end")
+
+    def set_or_delete_cue(self):
+        for cue in self.cue_points:
+            if cue.time == self.current_song_time:
+                self.cue_points.remove(cue)
+                return
+        self.cue_points.append(Cue(self.current_song_time))
 
 
 def install_fakes():
@@ -148,6 +187,17 @@ def install_fakes():
 
 install_fakes()
 os.environ["HELLBOY_PORT"] = "0"  # ephemeral port for the test server
+
+
+def free_udp_port():
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    return port
+
+
+os.environ["HELLBOY_OSC_PORT"] = str(free_udp_port())
 import HellboyProd  # noqa: E402  (must come after the fakes)
 
 
@@ -280,8 +330,111 @@ class RemoteScriptTest(unittest.TestCase):
         self.call("session_undo")  # must not open an undo step of its own
         self.assertEqual(self.song.undo_steps, ["begin", "end"])
         with self.assertRaises(ValueError):
-            self.call("notes_get", track=0, slot=0)  # empty slot still closes the step
+            self.call("clip_rename", track=0, slot=0, name="x")  # empty slot still closes the step
         self.assertEqual(self.song.undo_steps, ["begin", "end", "begin", "end"])
+
+    def test_read_only_calls_leave_undo_history_alone(self):
+        for method in ("session_state", "track_list", "arrangement_state", "cue_list",
+                       "arrangement_overview", "scene_list", "hello"):
+            self.call(method)
+        self.call("track_brief", index=0)
+        self.assertEqual(self.song.undo_steps, [])
+        mutating = [m for m in self.call("hello")["methods"]
+                    if not HellboyProd.READ_ONLY.search(m)]
+        for name in ("notes_chords", "track_set_volume", "arrangement_from_scenes", "cue_add"):
+            self.assertIn(name, mutating)
+
+    # ------------------------------------------------------- arrangement
+    def test_arrangement_from_scenes_fills_sections_and_cues(self):
+        self.call("clip_create", track=0, slot=0, length=4, name="beat")   # Intro: 1 bar loop
+        self.call("clip_create", track=1, slot=1, length=8, name="bass")   # Drop: 2 bar loop
+        result = self.call("arrangement_from_scenes", sections=[
+            {"scene": 0, "bars": 4}, {"scene": 1, "bars": 4, "name": "Drop A"}])
+        self.assertEqual(result["clips_placed"], 4 + 2)
+        self.assertEqual(result["end_bar"], 9)
+        starts = [c["start"] for c in self.call("arrangement_clips", track=1)["clips"]]
+        self.assertEqual(starts, [16.0, 24.0])
+        cues = self.call("cue_list")["cues"]
+        self.assertEqual([(c["name"], c["time"]) for c in cues], [("Intro", 0.0), ("Drop A", 16.0)])
+        self.assertEqual(self.song.current_song_time, 0.0)  # playhead restored
+
+    def test_arrangement_clip_notes_and_delete(self):
+        made = self.call("arrangement_create_midi_clip", track=0, bar=3, length=4)
+        self.assertEqual(made["clip"]["start"], 8.0)
+        self.call("arrangement_notes_set", track=0, index=0,
+                  notes=[{"pitch": 60, "start": 0, "dur": 1}])
+        self.assertEqual(self.call("arrangement_notes_get", track=0, index=0)["count"], 1)
+        self.call("arrangement_delete_clip", track=0, index=0)
+        self.assertEqual(self.call("arrangement_clips", track=0)["clips"], [])
+
+    def test_place_clip_and_unsupported_reason(self):
+        self.call("clip_create", track=0, slot=0, length=4)
+        placed = self.call("arrangement_place_clip", track=0, slot=0, bar=2)
+        self.assertEqual(placed["time"], 4.0)
+        del Track.create_midi_clip  # simulate Live 11
+        try:
+            reply = self.call("arrangement_create_midi_clip", track=0, time=0)
+            self.assertFalse(reply["ok"])
+            self.assertIn("Live 12", reply["reason"])
+        finally:
+            Track.create_midi_clip = lambda self, t, l: None
+
+    # --------------------------------------------------------------- osc
+    def osc_round_trip(self, packet):
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.settimeout(0.05)
+        try:
+            client.sendto(packet, ("127.0.0.1", self.surface._osc.port))
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                self.surface._tick()
+                try:
+                    return HellboyProd.hb_osc.parse_message(client.recv(65536))
+                except socket.timeout:
+                    continue
+        finally:
+            client.close()
+        self.fail("no OSC reply")
+
+    def test_osc_positional_and_json_arguments(self):
+        osc = HellboyProd.hb_osc
+        address, args = self.osc_round_trip(
+            osc.encode_message("/hellboy/track_set_volume", [1, 0.5]))
+        self.assertEqual((address, args[0], args[1]), ("/hellboy/reply", "track_set_volume", 1))
+        self.assertAlmostEqual(self.song.tracks[1].mixer_device.volume.value, 0.5)
+        _, args = self.osc_round_trip(
+            osc.encode_message("/hellboy/session_set_tempo", ['{"tempo": 98}']))
+        self.assertEqual(json.loads(args[2])["tempo"], 98)
+        _, args = self.osc_round_trip(osc.encode_message("/hellboy/nope", []))
+        self.assertEqual(args[1], 0)
+        self.assertIn("UnknownMethod", args[2])
+
+    def test_osc_bundle_is_unpacked(self):
+        osc = HellboyProd.hb_osc
+        inner = osc.encode_message("/hellboy/ping", [])
+        bundle = b"#bundle\0" + b"\0" * 8 + struct.pack(">i", len(inner)) + inner
+        self.assertEqual(osc.parse_packet(bundle), [("/hellboy/ping", [])])
+        self.assertIn("osc_port", self.call("hello"))
+
+    def test_reloaded_surface_gets_the_same_port(self):
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+        probe.close()
+        os.environ["HELLBOY_PORT"] = str(port)
+        try:
+            first = HellboyProd.create_instance(Song())
+            self.assertEqual(first._port, port)
+            client = socket.create_connection(("127.0.0.1", port), timeout=2)
+            first.disconnect()  # Live does this when the set or surface changes
+            client.settimeout(2)
+            self.assertEqual(client.recv(1), b"")  # the bridge sees the close
+            client.close()
+            second = HellboyProd.create_instance(Song())
+            self.assertEqual(second._port, port)
+            second.disconnect()
+        finally:
+            os.environ["HELLBOY_PORT"] = "0"
 
     def test_unknown_method_is_an_error_not_a_crash(self):
         with self.assertRaises(NameError):

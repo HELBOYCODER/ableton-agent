@@ -13,6 +13,10 @@ interface MockTrack {
 
 const port = Number(process.env.HELLBOY_PORT || 8971);
 
+// arrangement clips per track and cue points, filled by arrangement_from_scenes
+const arrangement: { start: number; end: number; name: string }[][] = [[], []];
+const cues: { name: string; time: number }[] = [];
+
 const state = {
   tempo: 124,
   signature: [4, 4],
@@ -36,7 +40,7 @@ const METHODS = [
   "session_state", "session_overview", "session_set_tempo", "session_set_signature",
   "session_save", "session_undo", "session_redo", "session_capture_scene",
   "session_set_master_volume", "transport_play", "transport_stop", "transport_seek",
-  "transport_set_loop",
+  "transport_set_loop", "transport_stop_all_clips",
   "track_list", "track_brief", "track_create_midi", "track_create_audio",
   "track_create_return", "track_delete", "track_duplicate", "track_rename",
   "track_color", "track_set_volume", "track_set_pan", "track_mute", "track_solo",
@@ -60,6 +64,11 @@ const METHODS = [
   "mix_report", "mix_balance", "mix_chain",
   "quickloop_generate", "quickloop_scatter",
   "license_check", "license_status",
+  "arrangement_state", "arrangement_overview", "arrangement_clips", "arrangement_place_clip",
+  "arrangement_create_midi_clip", "arrangement_create_audio_clip", "arrangement_delete_clip",
+  "arrangement_notes_get", "arrangement_notes_set", "arrangement_record",
+  "arrangement_back_to_arranger", "arrangement_show", "arrangement_from_scenes",
+  "cue_list", "cue_add", "cue_jump", "cue_rename", "cue_delete",
 ];
 
 function brief(index: number, track: MockTrack) {
@@ -278,6 +287,51 @@ function dispatch(method: string, params: any): any {
     case "quickloop_generate":
     case "quickloop_scatter":
       return { notes: 16, length: 4, slices: Number(params.slices || 8), mode: params.mode || "shuffle" };
+    case "arrangement_state": {
+      const end = Math.max(0, ...arrangement.flat().map((c) => c.end));
+      return {
+        song_length: end, current_time: 0, beats_per_bar: 4, playing: state.playing,
+        record_mode: false, overdub: false, back_to_arranger: false,
+        loop: { enabled: false, start: 0, length: 16 },
+        cues: cues.map((c, index) => ({ index, ...c })),
+      };
+    }
+    case "cue_list":
+      return { cues: cues.map((c, index) => ({ index, ...c })) };
+    case "arrangement_clips":
+      return { track: Number(params.track || 0), clips: arrangement[Number(params.track || 0)] || [] };
+    case "arrangement_overview":
+      return {
+        beats_per_bar: 4,
+        tracks: state.tracks.map((t, i) => ({
+          track: i, name: t.name,
+          clips: (arrangement[i] || []).map((c, index) => ({ index, ...c, length: c.end - c.start, midi: true })),
+        })),
+      };
+    case "arrangement_from_scenes": {
+      let cursor = (Number(params.start_bar || 1) - 1) * 4;
+      const layout = [];
+      let placed = 0;
+      for (const section of params.sections || []) {
+        const span = Number(section.bars || 8) * 4;
+        const used: number[] = [];
+        state.tracks.forEach((track, i) => {
+          const slot = track.slots[Number(section.scene || 0)];
+          if (!slot || !slot.hasClip) return;
+          arrangement[i] = arrangement[i] || [];
+          for (let offset = 0; offset < span; offset += 4) {
+            arrangement[i].push({ start: cursor + offset, end: cursor + offset + 4, name: slot.name || "Clip" });
+            placed += 1;
+          }
+          used.push(i);
+        });
+        const name = section.name || `Scene ${Number(section.scene || 0) + 1}`;
+        if (params.add_cues !== false) cues.push({ name, time: cursor });
+        layout.push({ name, scene: section.scene, start_bar: cursor / 4 + 1, bars: span / 4, tracks: used });
+        cursor += span;
+      }
+      return { ok: true, sections: layout, clips_placed: placed, end_bar: cursor / 4 + 1 };
+    }
     case "license_status":
       return { checked: false, valid: null, detail: "not checked" };
     case "license_check":

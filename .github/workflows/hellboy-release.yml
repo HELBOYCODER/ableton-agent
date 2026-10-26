@@ -13,26 +13,27 @@ permissions:
 defaults:
   run:
     working-directory: hellboy-prod
+    shell: bash
 
 jobs:
   binaries:
-    name: ${{ matrix.bridge }}
+    name: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-14
             target: node20-macos-arm64
-            bridge: hellboy-bridge-darwin-arm64
-            installer: hellboy-installer-darwin-arm64
+            platform: darwin-arm64
+            arch: arm64
           - os: macos-15-intel
             target: node20-macos-x64
-            bridge: hellboy-bridge-darwin-x64
-            installer: hellboy-installer-darwin-x64
+            platform: darwin-x64
+            arch: x64
           - os: windows-latest
             target: node20-win-x64
-            bridge: hellboy-bridge-win-x64.exe
-            installer: hellboy-installer-win-x64.exe
+            platform: win-x64
+            ext: .exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -46,28 +47,39 @@ jobs:
       - run: npm ci
       - run: npm run bundle
 
-      - name: Compile bridge
-        run: npx pkg bridge/build/bridge.cjs --targets ${{ matrix.target }} --output dist/${{ matrix.bridge }}
+      - name: Compile bridge, installer and Hellboy Studio
+        run: |
+          npx pkg bridge/build/bridge.cjs --targets ${{ matrix.target }} --output dist/hellboy-bridge-${{ matrix.platform }}${{ matrix.ext }}
+          npx pkg installer/build/installer.cjs --targets ${{ matrix.target }} --output dist/hellboy-installer-${{ matrix.platform }}${{ matrix.ext }}
+          npx pkg app/build/app.cjs --targets ${{ matrix.target }} --output dist/hellboy-studio-${{ matrix.platform }}${{ matrix.ext }}
 
-      - name: Compile installer
-        run: npx pkg installer/build/installer.cjs --targets ${{ matrix.target }} --output dist/${{ matrix.installer }}
+      - name: Windows - no console window for Hellboy Studio
+        if: runner.os == 'Windows'
+        run: node app/scripts/win-gui.mjs dist/hellboy-studio-${{ matrix.platform }}.exe
 
-      - name: Ad-hoc codesign
+      - name: macOS - sign the binaries
         if: runner.os == 'macOS'
         run: |
-          codesign --force --sign - dist/${{ matrix.bridge }}
-          codesign --force --sign - dist/${{ matrix.installer }}
+          for f in bridge installer studio; do codesign --force --sign - dist/hellboy-$f-${{ matrix.platform }}; done
+
+      - name: Smoke test the compiled Studio
+        run: |
+          npm run build -w mock-live
+          HELLBOY_APP_BIN=dist/hellboy-studio-${{ matrix.platform }}${{ matrix.ext }} node --test app/test/app.test.js
+
+      - name: macOS - build Hellboy Studio.app
+        if: runner.os == 'macOS'
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          node app/scripts/mac-app.mjs dist/hellboy-studio-${{ matrix.platform }} dist/app "$VERSION"
+          codesign --force --deep --sign - "dist/app/Hellboy Studio.app"
+          ditto -c -k --keepParent "dist/app/Hellboy Studio.app" dist/HellboyStudio-macOS-${{ matrix.arch }}.zip
+          rm -rf dist/app dist/hellboy-studio-${{ matrix.platform }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.bridge }}
-          path: hellboy-prod/dist/${{ matrix.bridge }}
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.installer }}
-          path: hellboy-prod/dist/${{ matrix.installer }}
+          name: hellboy-${{ matrix.platform }}
+          path: hellboy-prod/dist/*
           if-no-files-found: error
 
   publish:

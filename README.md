@@ -6,6 +6,12 @@
   <p>Talk with an AI music producer directly inside your terminal, plan and build tracks, generate humanized grooves, and control Ableton Live via CLI or native MCP.</p>
 </div>
 
+> **New: [Hellboy Prod](hellboy-prod/README.md)** - a desktop app (**Hellboy Studio**) for
+> macOS and Windows that needs no terminal: install the Live script with one click, launch
+> clips, write chord progressions, swing, arpeggiate, build an arrangement from your scenes,
+> and chat with an assistant that edits your set. It also works as an MCP server for Claude
+> Code / Codex and as an OSC target for TouchOSC and Max.
+
 ---
 
 ```

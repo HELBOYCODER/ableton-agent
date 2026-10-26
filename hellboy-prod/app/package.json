@@ -1,0 +1,17 @@
+{
+  "name": "@hellboy/app",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Hellboy Studio - a desktop app for Hellboy Prod, no terminal needed.",
+  "license": "MIT",
+  "scripts": {
+    "embed": "node scripts/embed.mjs",
+    "build": "npm run embed && tsc -p tsconfig.json --noEmit && npm run bundle",
+    "bundle": "npm run embed && esbuild src/main.ts --bundle --platform=node --format=cjs --target=node20 --loader:.html=text --outfile=build/app.cjs",
+    "icons": "node scripts/icons.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "*",
+    "zod-to-json-schema": "^3.24.1"
+  }
+}

@@ -20,6 +20,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 
 import json
 import os
+import re
 import socket
 import threading
 import traceback
@@ -36,18 +37,29 @@ from . import hb_automation
 from . import hb_mix
 from . import hb_quickloop
 from . import hb_license
+from . import hb_arrangement
+from . import hb_osc
 
 PRODUCT = "Hellboy Prod"
+SCRIPT_VERSION = "1.2.0"
 API_VERSION = 1
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8971
+POLL_SECONDS = 0.25
 
 # Methods that must not be wrapped in an undo step of their own.
 NO_UNDO_GROUP = frozenset(("session_undo", "session_redo", "hello", "ping", "shutdown"))
 
+# Read-only methods never open an undo step: UIs poll them constantly and they
+# must not leave empty entries in Live's undo history.
+READ_ONLY = re.compile(
+    r"(_state|_overview|_list|_brief|_info|_get|_get_param|_params|_stats|_status"
+    r"|_report|^arrangement_clips|_chains|_chain_devices|_detect_key|_roots|_children|_search"
+    r"|_item|^mix_chain)$")
+
 MODULES = (
     hb_tracks, hb_clips, hb_notes, hb_devices, hb_browser,
-    hb_automation, hb_mix, hb_quickloop, hb_license,
+    hb_automation, hb_mix, hb_quickloop, hb_license, hb_arrangement,
 )
 
 
@@ -62,6 +74,8 @@ class HellboyProd(ControlSurface):
         self._lock = threading.Lock()
         self._deferred_targets = []
         self._server = None
+        self._clients = set()
+        self._closing = False
         self._port = self._desired_port()
 
         self._handlers = {}
@@ -70,10 +84,14 @@ class HellboyProd(ControlSurface):
         self._builtins = self._build_builtins()
         self._method_names = sorted(set(list(self._handlers.keys()) + list(self._builtins.keys())))
 
+        self._osc = None
         with self.component_guard():
             self._start_server()
+            self._osc = hb_osc.start(self)
         self.schedule_message(1, self._tick)
         self.log_message("%s bridge listening on %s:%s" % (PRODUCT, HOST, self._port))
+        if self._osc is not None:
+            self.log_message("%s OSC listening on %s:%s" % (PRODUCT, self._osc.host, self._osc.port))
 
     # ------------------------------------------------------------------ ctx API
     @property
@@ -115,17 +133,31 @@ class HellboyProd(ControlSurface):
             server.bind((HOST, 0))  # port taken -> ephemeral, reported in hello
         self._port = server.getsockname()[1]
         server.listen(8)
+        # A timeout lets the loop notice disconnect(): on Linux, close() from
+        # another thread does not wake a blocked accept(), so the port would
+        # stay bound and a reloaded surface would land on a random port.
+        server.settimeout(POLL_SECONDS)
         self._server = server
 
         def accept_loop():
-            while True:
+            while not self._closing:
                 try:
                     conn, _addr = server.accept()
+                except socket.timeout:
+                    continue
                 except OSError:
                     break
+                conn.setblocking(True)
+                with self._lock:
+                    self._clients.add(conn)
                 threading.Thread(target=self._read_loop, args=(conn,), daemon=True).start()
+            try:
+                server.close()
+            except OSError:
+                pass
 
-        threading.Thread(target=accept_loop, daemon=True).start()
+        self._accept_thread = threading.Thread(target=accept_loop, daemon=True)
+        self._accept_thread.start()
 
     def _read_loop(self, conn):
         buffer = b""
@@ -144,15 +176,21 @@ class HellboyProd(ControlSurface):
                         request = json.loads(line.decode("utf-8"))
                     except ValueError:
                         continue
-                    with self._lock:
-                        self._queue.append((conn, request))
+                    self._enqueue(conn, request)
         except OSError:
             pass
         finally:
+            with self._lock:
+                self._clients.discard(conn)
             try:
                 conn.close()
             except OSError:
                 pass
+
+    def _enqueue(self, target, request):
+        """The only thing transport threads may do: hand work to the main thread."""
+        with self._lock:
+            self._queue.append((target, request))
 
     def _send(self, conn, payload):
         try:
@@ -162,6 +200,8 @@ class HellboyProd(ControlSurface):
 
     # ------------------------------------------------------------- main thread
     def _tick(self):
+        if self._closing:
+            return
         while True:
             with self._lock:
                 if not self._queue:
@@ -198,7 +238,8 @@ class HellboyProd(ControlSurface):
             call = lambda: handler(self, **params)
         # One agent call = one undo step in Live (Live 11+ exposes the markers).
         song = self.song()
-        grouped = method not in NO_UNDO_GROUP and hasattr(song, "begin_undo_step")
+        grouped = (method not in NO_UNDO_GROUP and not READ_ONLY.search(method)
+                   and hasattr(song, "begin_undo_step"))
         if grouped:
             song.begin_undo_step()
         try:
@@ -226,13 +267,16 @@ class HellboyProd(ControlSurface):
             "transport_stop": self._m_transport_stop,
             "transport_seek": self._m_transport_seek,
             "transport_set_loop": self._m_transport_set_loop,
+            "transport_stop_all_clips": self._m_transport_stop_all_clips,
         }
 
     def _m_hello(self, params):
         return {
             "product": PRODUCT,
             "api": API_VERSION,
+            "version": SCRIPT_VERSION,
             "port": self._port,
+            "osc_port": self._osc.port if self._osc is not None else None,
             "live_version": self._live_version(),
             "methods": self._method_names,
         }
@@ -354,11 +398,31 @@ class HellboyProd(ControlSurface):
             song.loop_length = max(0.0, U.as_float(params.get("length"), song.loop_length))
         return {"loop": bool(song.loop), "start": song.loop_start, "length": song.loop_length}
 
+    def _m_transport_stop_all_clips(self, params):
+        self.song().stop_all_clips()
+        return {"stopped": True}
+
     # --------------------------------------------------------------- teardown
     def disconnect(self):
-        try:
-            if self._server is not None:
-                self._server.close()
-        except OSError:
-            pass
+        self._closing = True
+        if self._server is not None:
+            # wait for the accept loop to close the socket so the port is free
+            # for the next instance Live creates right after this call
+            self._accept_thread.join(1.0)
+        # drop clients so the bridge sees the close and reconnects to the
+        # next instance of the surface
+        with self._lock:
+            clients = list(self._clients)
+            self._clients.clear()
+        for conn in clients:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                conn.close()
+            except OSError:
+                pass
+        if self._osc is not None:
+            self._osc.close()
         super(HellboyProd, self).disconnect()

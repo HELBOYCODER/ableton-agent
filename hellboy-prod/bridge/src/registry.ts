@@ -11,6 +11,8 @@ const track = z.number().int().describe("track index (negative counts from the e
 const slot = z.number().int().describe("clip slot index");
 const device = z.number().int().describe("device index on the track");
 const value01 = z.number().describe("normalised 0..1 value");
+const barNumber = z.number().min(1).describe("bar number, 1-based");
+const beats = z.number().min(0).describe("time in beats from the song start");
 const rootNote = z.string().default("C").describe("key root: C, C#, Db ... B");
 const scaleName = z
   .enum([
@@ -110,6 +112,13 @@ export const TOOLS: ToolDef[] = [
       length: z.number().min(0).optional(),
     },
     method: "transport_set_loop",
+  },
+
+  {
+    name: "transport_stop_all_clips",
+    description: "Stop every playing Session clip (like the Stop All Clips button).",
+    shape: {},
+    method: "transport_stop_all_clips",
   },
 
   // -------------------------------------------------------------- tracks
@@ -763,6 +772,127 @@ export const TOOLS: ToolDef[] = [
       seed: z.number().int().default(0),
     },
     method: "quickloop_scatter",
+  },
+
+  // --------------------------------------------------------- arrangement
+  {
+    name: "arrangement_state",
+    description: "Arrangement View state: song length, playhead, record/overdub, loop and cue points (times in beats).",
+    shape: {},
+    method: "arrangement_state",
+  },
+  {
+    name: "arrangement_overview",
+    description: "Every track's arrangement clips with start/end in beats (Live 11+).",
+    shape: {},
+    method: "arrangement_overview",
+  },
+  {
+    name: "arrangement_clips",
+    description: "List one track's arrangement clips, sorted by start time (Live 11+).",
+    shape: { track },
+    method: "arrangement_clips",
+  },
+  {
+    name: "arrangement_place_clip",
+    description: "Copy a Session clip onto the arrangement timeline at a bar (1-based) or time in beats (Live 11+).",
+    shape: { track, slot, bar: barNumber.optional(), time: beats.optional(), target_track: z.number().int().optional() },
+    method: "arrangement_place_clip",
+  },
+  {
+    name: "arrangement_create_midi_clip",
+    description: "Create an empty MIDI clip in the arrangement (Live 12+).",
+    shape: { track, bar: barNumber.optional(), time: beats.optional(), length: z.number().min(0.25).default(4), name: z.string().optional() },
+    method: "arrangement_create_midi_clip",
+  },
+  {
+    name: "arrangement_create_audio_clip",
+    description: "Place an audio file (absolute path) on an audio track's timeline (Live 12+).",
+    shape: { track, file_path: z.string(), bar: barNumber.optional(), time: beats.optional() },
+    method: "arrangement_create_audio_clip",
+  },
+  {
+    name: "arrangement_delete_clip",
+    description: "Delete an arrangement clip by its index from arrangement_clips (Live 12+).",
+    shape: { track, index: z.number().int() },
+    method: "arrangement_delete_clip",
+  },
+  {
+    name: "arrangement_notes_get",
+    description: "Read the MIDI notes of an arrangement clip.",
+    shape: { track, index: z.number().int() },
+    method: "arrangement_notes_get",
+  },
+  {
+    name: "arrangement_notes_set",
+    description: "Write MIDI notes into an arrangement clip (times relative to the clip start).",
+    shape: { track, index: z.number().int(), notes: z.array(noteShape), replace: z.boolean().default(true) },
+    method: "arrangement_notes_set",
+  },
+  {
+    name: "arrangement_record",
+    description: "Arm or disarm arrangement recording, optionally with overdub.",
+    shape: { enabled: z.boolean().default(true), overdub: z.boolean().optional() },
+    method: "arrangement_record",
+  },
+  {
+    name: "arrangement_back_to_arranger",
+    description: "Press Back to Arrangement so the arrangement plays again after session clips were launched.",
+    shape: {},
+    method: "arrangement_back_to_arranger",
+  },
+  {
+    name: "arrangement_show",
+    description: "Switch Live's main view to the Arrangement or the Session view.",
+    shape: { view: z.enum(["Arranger", "Session"]).default("Arranger") },
+    method: "arrangement_show",
+  },
+  {
+    name: "arrangement_from_scenes",
+    description:
+      "Auto-arranger: lay scenes out on the timeline as song sections. Each section repeats every track's clip of that scene for N bars and gets a cue point. Example sections: [{scene:0,bars:8,name:'Intro'},{scene:1,bars:16,name:'Drop'}].",
+    shape: {
+      sections: z
+        .array(z.object({ scene: z.number().int().min(0), bars: z.number().min(1), name: z.string().optional() }))
+        .min(1)
+        .max(64),
+      start_bar: barNumber.default(1),
+      tracks: z.array(z.number().int()).optional().describe("only these tracks (default: all)"),
+      add_cues: z.boolean().default(true),
+    },
+    method: "arrangement_from_scenes",
+  },
+
+  // ---------------------------------------------------------------- cues
+  {
+    name: "cue_list",
+    description: "List arrangement cue points (locators), sorted by time.",
+    shape: {},
+    method: "cue_list",
+  },
+  {
+    name: "cue_add",
+    description: "Add a named cue point at a bar or time (default: the playhead).",
+    shape: { bar: barNumber.optional(), time: beats.optional(), name: z.string().optional() },
+    method: "cue_add",
+  },
+  {
+    name: "cue_jump",
+    description: "Move the playhead to a cue point.",
+    shape: { index: z.number().int().min(0) },
+    method: "cue_jump",
+  },
+  {
+    name: "cue_rename",
+    description: "Rename a cue point.",
+    shape: { index: z.number().int().min(0), name: z.string() },
+    method: "cue_rename",
+  },
+  {
+    name: "cue_delete",
+    description: "Delete a cue point.",
+    shape: { index: z.number().int().min(0) },
+    method: "cue_delete",
   },
 
   // ------------------------------------------------------------- license

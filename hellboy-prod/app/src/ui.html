@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hellboy Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23e5322d'/%3E%3Cpath d='M14 10l8 14M50 10l-8 14' stroke='%23fff' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M20 24v28M44 24v28M20 38h24' stroke='%23fff' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #0d0e11; --panel: #15171c; --panel-2: #1b1e25; --line: #272b34; --line-2: #333845;
+  --text: #e9eaee; --muted: #8d92a0; --faint: #5d6270;
+  --accent: #e5322d; --accent-2: #ff5a4e; --accent-ink: #fff;
+  --ok: #38c976; --warn: #f2a93b; --bad: #ef4f4f; --play: #f2a93b;
+  --radius: 10px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--accent-2); }
+
+/* ---------- shell ---------- */
+.app { display: grid; grid-template-columns: 210px 1fr; grid-template-rows: 58px 1fr; height: 100vh; }
+.top { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 16px;
+  border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #14161b, #101216); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .08em; width: 182px; }
+.brand svg { width: 30px; height: 30px; }
+.brand small { display: block; font-weight: 500; letter-spacing: 0; color: var(--muted); font-size: 11px; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: 12.5px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(56,201,118,.18); }
+.dot.bad { background: var(--bad); }
+.transport { display: flex; align-items: center; gap: 6px; margin-left: 6px; }
+.tbtn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--panel-2);
+  display: grid; place-items: center; }
+.tbtn:hover { border-color: var(--muted); }
+.tbtn.on { background: var(--play); border-color: var(--play); color: #111; }
+.tbtn svg { width: 15px; height: 15px; fill: currentColor; }
+.tempo { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 34px; border: 1px solid var(--line-2);
+  border-radius: 8px; background: var(--panel-2); }
+.tempo input[type=number] { width: 64px; background: none; border: 0; padding: 0; outline: none; font-family: var(--mono); font-size: 15px; text-align: right; }
+.tempo input:focus { outline: none; }
+.tempo span { color: var(--muted); font-size: 12px; }
+.spacer { flex: 1; }
+
+nav { border-right: 1px solid var(--line); padding: 14px 10px; display: flex; flex-direction: column; gap: 3px; background: #101216; }
+nav button { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 8px; border: 0;
+  background: none; color: var(--muted); text-align: left; font-weight: 500; }
+nav button svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+nav button:hover { background: var(--panel); color: var(--text); }
+nav button.active { background: var(--panel-2); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+nav .foot { margin-top: auto; padding: 10px 12px; color: var(--faint); font-size: 12px; }
+
+main { overflow: auto; padding: 22px 26px 40px; }
+.view { display: none; max-width: 1180px; }
+.view.active { display: block; }
+h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.01em; }
+.lead { color: var(--muted); margin: 0 0 20px; }
+h2 { font-size: 15px; margin: 0 0 12px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.card p { color: var(--muted); margin: 0 0 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row + .row { margin-top: 10px; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+input[type=text], input[type=number], input[type=password], select, textarea {
+  background: #0f1115; border: 1px solid var(--line-2); border-radius: 7px; padding: 7px 9px; min-width: 0; }
+input:focus, select:focus, textarea:focus { outline: 2px solid rgba(229,50,45,.45); outline-offset: 0; border-color: var(--accent); }
+input[type=number] { width: 78px; font-family: var(--mono); }
+.btn { padding: 8px 14px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--panel-2); font-weight: 600; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { background: var(--accent-2); }
+.btn.ghost { background: none; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.sm { padding: 5px 10px; font-size: 12.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line-2); background: none; color: var(--muted); font-size: 12.5px; }
+.chip:hover { color: var(--text); border-color: var(--muted); }
+.result { margin-top: 12px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); white-space: pre-wrap; }
+.big { font-size: 22px; font-weight: 700; color: var(--text); font-family: inherit; }
+.muted { color: var(--muted); }
+code { font-family: var(--mono); font-size: 12.5px; background: #0f1115; border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+
+/* ---------- session grid ---------- */
+.session { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
+.col { flex: 0 0 132px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.col.scenes { flex-basis: 120px; }
+.chead { padding: 9px 10px 8px; border-top: 3px solid var(--c, var(--line-2)); border-bottom: 1px solid var(--line); min-height: 52px; }
+.chead b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chead small { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.slot { height: 34px; margin: 4px 6px 0; border-radius: 6px; border: 1px dashed #2a2e37; display: flex; align-items: center;
+  gap: 6px; padding: 0 4px 0 8px; font-size: 12px; color: var(--faint); background: none; text-align: left; }
+.slot.full { border: 1px solid transparent; background: color-mix(in srgb, var(--c, #555) 32%, #16181d); color: var(--text); }
+.slot.sel { outline: 2px solid var(--accent); }
+.slot.playing { box-shadow: inset 0 0 0 1px var(--play); }
+.slot .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot .go { width: 22px; height: 22px; border-radius: 5px; border: 0; background: rgba(0,0,0,.28); display: grid; place-items: center; color: var(--text); }
+.slot .go svg { width: 10px; height: 10px; fill: currentColor; }
+.slot .go:hover { background: var(--play); color: #111; }
+.mix { margin-top: auto; padding: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.mix input[type=range] { width: 100%; accent-color: var(--accent); }
+.ms { display: flex; gap: 5px; }
+.ms button { flex: 1; padding: 3px 0; border-radius: 5px; border: 1px solid var(--line-2); background: none; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.ms button.on.m { background: var(--warn); color: #111; border-color: var(--warn); }
+.ms button.on.s { background: #4aa3ff; color: #111; border-color: #4aa3ff; }
+.empty { padding: 40px; text-align: center; color: var(--muted); border: 1px dashed var(--line-2); border-radius: var(--radius); }
+.target { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; margin-bottom: 16px;
+  border-radius: var(--radius); border: 1px solid var(--line); background: linear-gradient(90deg, rgba(229,50,45,.12), transparent 60%); }
+.target b { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-2); }
+
+/* ---------- arrangement ---------- */
+.sections { display: flex; flex-direction: column; gap: 8px; }
+.section-row { display: grid; grid-template-columns: 26px 1fr 90px 1.2fr 34px; gap: 8px; align-items: center; }
+.section-row .n { color: var(--faint); font-family: var(--mono); text-align: right; }
+.timeline { margin-top: 14px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: #0f1115; }
+.tl-inner { position: relative; min-width: 100%; }
+.ruler { height: 24px; position: relative; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.ruler span { position: absolute; top: 5px; padding-left: 3px; border-left: 1px solid var(--line-2); height: 19px; }
+.lane { height: 30px; position: relative; border-bottom: 1px solid #1b1e25; }
+.lane .lbl { position: sticky; left: 0; z-index: 2; display: inline-block; width: 110px; height: 100%; padding: 6px 8px;
+  font-size: 12px; background: #12141a; border-right: 1px solid var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.blk { position: absolute; top: 4px; height: 22px; border-radius: 4px; font-size: 11px; padding: 3px 6px; overflow: hidden;
+  white-space: nowrap; background: color-mix(in srgb, var(--c) 55%, #1b1e25); border: 1px solid color-mix(in srgb, var(--c) 80%, #000); }
+.cue { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--accent); z-index: 1; }
+.cue button { position: absolute; top: 2px; left: 2px; border: 0; border-radius: 4px; background: var(--accent); color: #fff;
+  font-size: 10.5px; padding: 1px 6px; white-space: nowrap; }
+
+/* ---------- chat ---------- */
+.chat { display: grid; grid-template-rows: 1fr auto; height: calc(100vh - 58px - 62px - 64px); min-height: 380px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.msgs { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.msg { max-width: 760px; }
+.msg.user { align-self: flex-end; background: #2a1a1a; border: 1px solid #4a2523; padding: 9px 13px; border-radius: 12px 12px 3px 12px; white-space: pre-wrap; }
+.msg.bot .body { white-space: pre-wrap; word-wrap: break-word; }
+.msg.bot .body p { margin: 0 0 8px; }
+.msg.err { color: var(--bad); }
+.msg.note { color: var(--warn); font-size: 13px; }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.tool { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; padding: 3px 9px;
+  border-radius: 999px; background: #0f1115; border: 1px solid var(--line-2); color: var(--muted); }
+.tool.ok::before { content: "✓"; color: var(--ok); }
+.tool.bad::before { content: "✕"; color: var(--bad); }
+.tool.run::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.composer { border-top: 1px solid var(--line); padding: 12px; display: flex; gap: 10px; align-items: flex-end; background: #13151a; }
+.composer textarea { flex: 1; resize: none; min-height: 44px; max-height: 180px; }
+.typing { color: var(--faint); font-size: 12.5px; }
+.welcome { margin: auto; text-align: center; max-width: 560px; color: var(--muted); }
+.welcome h2 { color: var(--text); font-size: 18px; }
+.welcome .chips { justify-content: center; margin-top: 14px; }
+
+/* ---------- setup ---------- */
+.steps { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+.step { display: grid; grid-template-columns: 34px 1fr; gap: 14px; }
+.badge { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700;
+  background: var(--panel-2); border: 1px solid var(--line-2); color: var(--muted); }
+.badge.done { background: var(--ok); border-color: var(--ok); color: #0b2516; }
+.kv { display: grid; grid-template-columns: 140px 1fr; gap: 4px 12px; font-size: 13px; margin: 8px 0 12px; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.kv span:nth-child(even) { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+ol.howto { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
+ol.howto li { margin: 3px 0; }
+ol.howto b { color: var(--text); }
+
+.toast { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+.toast div { background: #1d2028; border: 1px solid var(--line-2); border-left: 3px solid var(--ok); padding: 10px 14px;
+  border-radius: 8px; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,.45); animation: pop .18s ease-out; }
+.toast div.bad { border-left-color: var(--bad); }
+@keyframes pop { from { transform: translateY(6px); opacity: 0; } }
+
+@media (max-width: 820px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
+  .top { flex-wrap: wrap; padding: 10px 14px; gap: 10px; }
+  .brand { width: auto; }
+  nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; }
+  nav .foot { display: none; }
+  main { padding: 16px; }
+  .chat { height: 70vh; }
+  .section-row { grid-template-columns: 20px 1fr 70px 34px; }
+  .section-row input[type=text] { display: none; }
+  .kv { grid-template-columns: 1fr; }
+  .kv span:nth-child(even) { margin-bottom: 6px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#e5322d"/><path d="M14 10l8 14M50 10l-8 14" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M20 24v28M44 24v28M20 38h24" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg>
+      <div>HELLBOY<small>Studio <span id="ver"></span></small></div>
+    </div>
+    <span class="pill" id="livePill"><span class="dot" id="liveDot"></span><span id="liveText">Connecting…</span></span>
+    <div class="transport">
+      <button class="tbtn" id="playBtn" title="Play"><svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z"/></svg></button>
+      <button class="tbtn" id="stopBtn" title="Stop"><svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1"/></svg></button>
+      <div class="tempo"><input id="tempo" type="number" min="20" max="999" step="0.5" aria-label="Tempo"><span>BPM</span></div>
+      <span class="pill muted" id="sig">4/4</span>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn sm" id="undoBtn" title="Undo the last change in Live">↶ Undo</button>
+    <button class="btn sm ghost" id="redoBtn" title="Redo">↷</button>
+  </header>
+
+  <nav>
+    <button data-view="studio" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>Studio</button>
+    <button data-view="create"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Create</button>
+    <button data-view="arrange"><svg viewBox="0 0 24 24"><path d="M3 6h7M13 6h8M3 12h11M17 12h4M3 18h4M10 18h11"/></svg>Arrange</button>
+    <button data-view="assistant"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Assistant</button>
+    <button data-view="setup"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Setup</button>
+    <div class="foot">Every change is one Undo in Live.</div>
+  </nav>
+
+  <main>
+    <!-- ======================= STUDIO ======================= -->
+    <section class="view active" id="view-studio">
+      <h1>Session</h1>
+      <p class="lead">Launch clips and scenes, mix, and pick a clip to work on in <b>Create</b>.</p>
+      <div id="session" class="session"></div>
+    </section>
+
+    <!-- ======================= CREATE ======================= -->
+    <section class="view" id="view-create">
+      <h1>Create</h1>
+      <p class="lead">Music theory and groove tools that write straight into your clip.</p>
+      <div class="target">
+        <b>Clip</b>
+        <select id="tTrack" aria-label="Track"></select>
+        <select id="tSlot" aria-label="Clip slot"></select>
+        <span class="muted" id="tInfo"></span>
+        <button class="btn sm" id="newClipBtn">+ New 4-bar clip here</button>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h2>Key</h2>
+          <p>Find the key of the clip.</p>
+          <button class="btn primary" id="keyBtn">Detect key</button>
+          <div class="result" id="keyOut"></div>
+        </div>
+
+        <div class="card">
+          <h2>Chord progression</h2>
+          <div class="row">
+            <label class="f">Root<select id="cRoot"></select></label>
+            <label class="f">Scale<select id="cScale"></select></label>
+            <label class="f">Type<select id="cSize"><option value="3">Triads</option><option value="4">7ths</option><option value="5">9ths</option></select></label>
+          </div>
+          <div class="row">
+            <label class="f" style="flex:1">Degrees<input type="text" id="cProg" value="1 6 3 7"></label>
+            <label class="f">Octave<input type="number" id="cOct" value="3" min="-1" max="7"></label>
+            <label class="f">Beats each<input type="number" id="cBeats" value="4" min="0.5" step="0.5"></label>
+          </div>
+          <div class="row chips" id="progChips"></div>
+          <div class="row">
+            <label class="row muted"><input type="checkbox" id="cSpread"> Open voicing</label>
+            <div class="spacer"></div>
+            <button class="btn primary" id="chordBtn">Write chords</button>
+          </div>
+          <div class="result" id="chordOut"></div>
+        </div>
+
+        <div class="card">
+          <h2>Fit to scale</h2>
+          <p>Snap out-of-key notes using the root and scale above.</p>
+          <div class="row">
+            <select id="fitDir"><option value="nearest">Nearest</option><option value="up">Up</option><option value="down">Down</option></select>
+            <button class="btn primary" id="fitBtn">Fit notes</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Arpeggiator</h2>
+          <div class="row">
+            <label class="f">Style<select id="aStyle"><option>up</option><option>down</option><option>updown</option><option>random</option><option>played</option></select></label>
+            <label class="f">Rate<select id="aRate"><option value="0.5">1/8</option><option value="0.25" selected>1/16</option><option value="0.125">1/32</option><option value="0.3333">1/8T</option></select></label>
+            <label class="f">Octaves<input type="number" id="aOct" value="1" min="1" max="4"></label>
+            <label class="f">Gate<input type="number" id="aGate" value="0.8" min="0.05" max="1" step="0.05"></label>
+          </div>
+          <div class="row"><div class="spacer"></div><button class="btn primary" id="arpBtn">Arpeggiate</button></div>
+        </div>
+
+        <div class="card">
+          <h2>Groove</h2>
+          <div class="row">
+            <label class="f" style="flex:1">Swing<select id="gPreset"></select></label>
+            <button class="btn primary" id="swingBtn" style="align-self:flex-end">Swing</button>
+          </div>
+          <div class="row">
+            <label class="f">Timing ±<input type="number" id="hTime" value="0.02" min="0" step="0.005"></label>
+            <label class="f">Velocity ±<input type="number" id="hVel" value="10" min="0"></label>
+            <button class="btn" id="humBtn" style="align-self:flex-end">Humanize</button>
+          </div>
+          <div class="row">
+            <label class="f">Grid<select id="qGrid"><option value="0.5">1/8</option><option value="0.25" selected>1/16</option><option value="0.125">1/32</option></select></label>
+            <label class="f">Strength<input type="number" id="qStr" value="1" min="0" max="1" step="0.1"></label>
+            <button class="btn" id="quantBtn" style="align-self:flex-end">Quantize</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Quick loop</h2>
+          <p>Slice the clip and rebuild it in a new order into the next empty slot.</p>
+          <div class="row">
+            <label class="f">Mode<select id="lMode"><option>shuffle</option><option>reverse</option><option>rotate</option></select></label>
+            <label class="f">Slices<input type="number" id="lSlices" value="8" min="1" max="64"></label>
+            <label class="f">Seed<input type="number" id="lSeed" value="1"></label>
+            <button class="btn" id="diceBtn" title="Random seed" style="align-self:flex-end">🎲</button>
+          </div>
+          <div class="row"><div class="spacer"></div><button class="btn primary" id="loopBtn">Make variation</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= ARRANGE ======================= -->
+    <section class="view" id="view-arrange">
+      <h1>Arrange</h1>
+      <p class="lead">Turn your scenes into a song: every section repeats a scene's clips for N bars and gets a locator.</p>
+      <div class="grid" style="grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr)">
+        <div class="card">
+          <h2>Song builder</h2>
+          <div class="sections" id="sections"></div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn sm" id="addSection">+ Section</button>
+            <div class="chips" id="formChips"></div>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <label class="f">Start bar<input type="number" id="startBar" value="1" min="1"></label>
+            <label class="row muted" style="align-self:flex-end"><input type="checkbox" id="addCues" checked> Add locators</label>
+            <div class="spacer"></div>
+            <button class="btn primary" id="buildBtn" style="align-self:flex-end">Build arrangement</button>
+          </div>
+          <div class="result" id="buildOut"></div>
+        </div>
+        <div class="card">
+          <h2>Timeline</h2>
+          <div class="row">
+            <button class="btn sm" id="showArr">Show in Live</button>
+            <button class="btn sm" id="backArr">Back to Arrangement</button>
+            <button class="btn sm" id="recArr">● Arm record</button>
+            <button class="btn sm ghost" id="refreshArr">Refresh</button>
+          </div>
+          <div class="result" id="arrInfo"></div>
+        </div>
+      </div>
+      <div class="timeline" id="timeline"><div class="empty">Open this page with Live connected to see the arrangement.</div></div>
+    </section>
+
+    <!-- ======================= ASSISTANT ======================= -->
+    <section class="view" id="view-assistant">
+      <div class="row" style="margin-bottom:12px">
+        <div><h1>Assistant</h1></div>
+        <div class="spacer"></div>
+        <span class="muted" id="modelInfo"></span>
+        <button class="btn sm" id="newChat">New chat</button>
+      </div>
+      <div class="chat">
+        <div class="msgs" id="msgs">
+          <div class="welcome" id="welcome">
+            <h2>What are we making?</h2>
+            <p>Ask in plain words, in any language. The assistant reads your set and changes it directly; every change is one Undo.</p>
+            <div class="chips" id="suggest"></div>
+          </div>
+        </div>
+        <form class="composer" id="composer">
+          <textarea id="prompt" rows="1" dir="auto" placeholder="e.g. Write a dark i–VI–III–VII progression in A minor on a new MIDI track"></textarea>
+          <button class="btn primary" id="sendBtn" type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ======================= SETUP ======================= -->
+    <section class="view" id="view-setup">
+      <h1>Setup</h1>
+      <p class="lead">Three steps, no terminal.</p>
+      <div class="steps">
+        <div class="step"><div class="badge" id="b1">1</div><div class="card">
+          <h2>Install the Live script</h2>
+          <div class="kv" id="installKv"></div>
+          <div class="row"><button class="btn primary" id="installBtn">Install</button><button class="btn ghost sm" id="uninstallBtn">Remove</button></div>
+        </div></div>
+
+        <div class="step"><div class="badge" id="b2">2</div><div class="card">
+          <h2>Turn it on in Ableton Live</h2>
+          <ol class="howto">
+            <li>Restart Live if it was open while installing.</li>
+            <li>Open <b>Settings</b> (Preferences) → <b>Link, Tempo & MIDI</b>.</li>
+            <li>Under <b>Control Surface</b>, pick <b>HellboyProd</b>. Input and Output can stay on <b>None</b>.</li>
+          </ol>
+          <p style="margin-top:10px" id="liveHelp"></p>
+        </div></div>
+
+        <div class="step"><div class="badge" id="b3">3</div><div class="card">
+          <h2>Assistant</h2>
+          <p>The built-in assistant uses your Anthropic API key. It is stored only on this computer.</p>
+          <div class="row">
+            <input type="password" id="apiKey" placeholder="sk-ant-…" style="flex:1; min-width:220px" autocomplete="off">
+            <button class="btn primary" id="saveKey">Save key</button>
+            <button class="btn ghost sm" id="clearKey">Remove</button>
+          </div>
+          <div class="row">
+            <label class="f">Model<select id="model"></select></label>
+            <label class="f">Effort<select id="effort"></select></label>
+            <span class="muted" id="keyInfo" style="align-self:flex-end"></span>
+          </div>
+        </div></div>
+
+        <div class="step"><div class="badge">+</div><div class="card">
+          <h2>Optional: connect a coding agent</h2>
+          <p>Use Hellboy from Claude Code or Codex as well. This app is the bridge, so keep it where it is after connecting.</p>
+          <div class="row">
+            <button class="btn" id="regClaude">Connect Claude Code</button>
+            <button class="btn" id="regCodex">Connect Codex</button>
+          </div>
+          <div class="row">
+            <input type="text" id="projDir" placeholder="Project folder for .mcp.json" style="flex:1; min-width:220px">
+            <button class="btn" id="regProject">Write .mcp.json</button>
+          </div>
+          <div class="result" id="regOut"></div>
+        </div></div>
+
+        <div class="step"><div class="badge">+</div><div class="card">
+          <h2>Optional: OSC controllers</h2>
+          <p id="oscInfo">TouchOSC, Lemur or Max can call any tool over OSC.</p>
+          <div class="result">/hellboy/transport_play
+/hellboy/session_set_tempo 124
+/hellboy/track_set_volume 2 0.7
+/hellboy/scene_fire 3
+/hellboy/notes_chords '{"track":0,"slot":0,"root":"A","scale":"minor"}'</div>
+        </div></div>
+
+        <div class="row" style="margin-left:48px"><button class="btn ghost" id="quitBtn">Quit Hellboy Studio</button></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- plumbing
+const params = new URLSearchParams(location.search);
+if (params.get("t")) {
+  sessionStorage.setItem("hellboy-token", params.get("t"));
+  history.replaceState(null, "", "/");
+}
+const TOKEN = sessionStorage.getItem("hellboy-token") || "";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "content-type": "application/json", "x-hellboy-token": TOKEN },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+/** Call a Live tool; throws with a readable message when Live answers ok:false. */
+async function live(method, params = {}) {
+  const reply = await api("/api/call", { method, params });
+  if (!reply.ok) throw new Error(reply.error);
+  if (reply.result && reply.result.ok === false && reply.result.reason) throw new Error(reply.result.reason);
+  return reply.result;
+}
+
+function toast(text, bad = false) {
+  const node = document.createElement("div");
+  node.textContent = text;
+  if (bad) node.className = "bad";
+  $("toast").appendChild(node);
+  setTimeout(() => node.remove(), bad ? 6500 : 3200);
+}
+
+async function act(button, fn) {
+  const label = button && button.textContent;
+  if (button) { button.disabled = true; }
+  try { return await fn(); }
+  catch (error) { toast(error.message, true); }
+  finally { if (button) { button.disabled = false; button.textContent = label; } }
+}
+
+const HUES = [0, 22, 40, 52, 95, 140, 175, 195, 215, 240, 265, 290, 320, 340];
+const trackColor = (i) => `hsl(${HUES[i % HUES.length]} 62% 52%)`;
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const SCALES = ["minor", "major", "dorian", "phrygian", "lydian", "mixolydian", "locrian", "harmonic_minor", "melodic_minor", "pentatonic_minor", "pentatonic_major", "blues"];
+const GROOVES = ["mpc_54", "mpc_58", "mpc_62", "mpc_66", "mpc_71", "house_shuffle", "hiphop_lazy", "eighth_swing", "triplet_eighth", "straight"];
+
+// ---------------------------------------------------------------- state
+const state = { connected: false, session: null, tracks: [], status: null, selected: { track: 0, slot: 0 }, view: "studio" };
+
+// ---------------------------------------------------------------- navigation
+document.querySelectorAll("nav button[data-view]").forEach((btn) => {
+  btn.addEventListener("click", () => show(btn.dataset.view));
+});
+function show(view) {
+  state.view = view;
+  document.querySelectorAll("nav button[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
+  if (view === "arrange") loadArrangement();
+  if (view === "setup") refreshStatus();
+  if (view === "assistant") $("prompt").focus();
+  refreshSession();
+}
+
+// ---------------------------------------------------------------- status
+async function refreshStatus() {
+  try {
+    const s = await api("/api/status");
+    state.status = s;
+    $("ver").textContent = s.app.version;
+    setConnected(s.live.connected, s.live);
+    renderSetup(s);
+  } catch (error) {
+    setConnected(false, { error: error.message });
+  }
+}
+
+function setConnected(ok, info) {
+  const changed = ok !== state.connected;
+  state.connected = ok;
+  $("liveDot").className = "dot " + (ok ? "ok" : "bad");
+  $("liveText").textContent = ok ? `Live ${info.info?.live_version || ""} connected` : "Live not connected";
+  $("livePill").title = ok ? "" : (info.error || "");
+  if (changed && ok) refreshSession();
+}
+
+// ---------------------------------------------------------------- session
+let refreshing = false, dragging = false;
+async function refreshSession() {
+  if (refreshing || dragging || !state.connected) {
+    if (!state.connected) renderSession();
+    return;
+  }
+  refreshing = true;
+  try {
+    const s = await live("session_state");
+    state.session = s;
+    state.tracks = await Promise.all(s.tracks.map((t) => live("track_brief", { index: t.index }).catch(() => ({ ...t, slots: [] }))));
+    if (document.activeElement !== $("tempo")) $("tempo").value = +s.tempo.toFixed(2);
+    $("sig").textContent = s.signature.join("/");
+    $("playBtn").classList.toggle("on", s.playing);
+    renderSession();
+    renderTargets();
+  } catch (error) {
+    if (/not connected|closed|ECONN/.test(error.message)) setConnected(false, { error: error.message });
+  } finally {
+    refreshing = false;
+  }
+}
+
+function renderSession() {
+  const root = $("session");
+  if (!state.connected || !state.session) {
+    root.innerHTML = `<div class="empty" style="flex:1">Live is not connected yet. Finish <a href="#" data-go="setup">Setup</a>, then open a set.</div>`;
+    return;
+  }
+  const s = state.session;
+  const slotCount = Math.max(s.scene_count, ...state.tracks.map((t) => (t.slots || []).length), 1);
+  let html = `<div class="col scenes"><div class="chead"><b>Scenes</b><small>${s.scene_count}</small></div>`;
+  for (let i = 0; i < slotCount; i++) {
+    const name = s.scenes[i]?.name || `${i + 1}`;
+    html += `<button class="slot full" style="--c:#555" data-scene="${i}"><span class="nm">${esc(name)}</span><span class="go"><svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z"/></svg></span></button>`;
+  }
+  html += `<div class="mix"><button class="btn sm" data-stopall>Stop all</button></div></div>`;
+  state.tracks.forEach((t, ti) => {
+    const c = trackColor(ti);
+    html += `<div class="col" style="--c:${c}"><div class="chead"><b title="${esc(t.name)}">${esc(t.name)}</b><small>${esc(t.kind)} · ${t.device_count} dev</small></div>`;
+    for (let i = 0; i < slotCount; i++) {
+      const slot = (t.slots || [])[i];
+      const sel = state.selected.track === ti && state.selected.slot === i ? " sel" : "";
+      if (slot && slot.has_clip) {
+        html += `<button class="slot full${sel}" data-t="${ti}" data-s="${i}"><span class="nm">${esc(slot.name || "clip")}</span><span class="go" data-fire="${ti}:${i}"><svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z"/></svg></span></button>`;
+      } else {
+        html += `<button class="slot${sel}" data-t="${ti}" data-s="${i}"><span class="nm"></span></button>`;
+      }
+    }
+    html += `<div class="mix"><input type="range" min="0" max="1" step="0.005" value="${t.volume}" data-vol="${ti}" aria-label="Volume ${esc(t.name)}">
+      <div class="ms"><button class="m${t.mute ? " on" : ""}" data-mute="${ti}">M</button><button class="s${t.solo ? " on" : ""}" data-solo="${ti}">S</button></div></div></div>`;
+  });
+  root.innerHTML = html;
+}
+
+$("session").addEventListener("click", (event) => {
+  const el = event.target.closest("[data-fire],[data-scene],[data-t],[data-mute],[data-solo],[data-stopall],[data-go]");
+  if (!el) return;
+  event.preventDefault();
+  if (el.dataset.go) return show(el.dataset.go);
+  if (el.dataset.fire) {
+    event.stopPropagation();
+    const [t, s] = el.dataset.fire.split(":").map(Number);
+    return act(null, () => live("clip_fire", { track: t, slot: s }));
+  }
+  if (el.dataset.scene !== undefined) return act(null, () => live("scene_fire", { index: +el.dataset.scene }));
+  if (el.dataset.stopall !== undefined) return act(null, () => live("transport_stop_all_clips"));
+  if (el.dataset.mute) return act(null, async () => { const t = state.tracks[+el.dataset.mute]; await live("track_mute", { index: +el.dataset.mute, value: !t.mute }); refreshSession(); });
+  if (el.dataset.solo) return act(null, async () => { const t = state.tracks[+el.dataset.solo]; await live("track_solo", { index: +el.dataset.solo, value: !t.solo }); refreshSession(); });
+  if (el.dataset.t !== undefined) {
+    state.selected = { track: +el.dataset.t, slot: +el.dataset.s };
+    renderSession(); renderTargets();
+  }
+});
+$("session").addEventListener("input", (event) => {
+  const el = event.target;
+  if (el.dataset.vol === undefined) return;
+  dragging = true;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => live("track_set_volume", { index: +el.dataset.vol, value: +el.value }).catch((e) => toast(e.message, true)), 40);
+});
+$("session").addEventListener("change", () => { dragging = false; });
+
+// ---------------------------------------------------------------- transport
+$("playBtn").onclick = () => act(null, async () => { await live("transport_play"); refreshSession(); });
+$("stopBtn").onclick = () => act(null, async () => { await live("transport_stop"); refreshSession(); });
+$("tempo").onchange = () => act(null, () => live("session_set_tempo", { tempo: +$("tempo").value }));
+$("undoBtn").onclick = () => act(null, async () => { await live("session_undo"); toast("Undone in Live"); refreshSession(); });
+$("redoBtn").onclick = () => act(null, async () => { await live("session_redo"); refreshSession(); });
+
+// ---------------------------------------------------------------- create
+function fillSelect(select, values, labels) {
+  select.innerHTML = values.map((v, i) => `<option value="${esc(v)}">${esc(labels ? labels[i] : v)}</option>`).join("");
+}
+fillSelect($("cRoot"), NOTE_NAMES); $("cRoot").value = "A";
+fillSelect($("cScale"), SCALES, SCALES.map((s) => s.replace("_", " ")));
+fillSelect($("gPreset"), GROOVES, GROOVES.map((g) => g.replace("mpc_", "MPC ").replace("_", " ")));
+$("gPreset").value = "mpc_58";
+const PROGRESSIONS = [["i–VI–III–VII", "1 6 3 7", "minor"], ["I–V–vi–IV", "1 5 6 4", "major"], ["ii–V–I", "2 5 1 1", "major"], ["i–iv–v–i", "1 4 5 1", "minor"], ["i–VII–VI–VII", "1 7 6 7", "minor"]];
+$("progChips").innerHTML = PROGRESSIONS.map(([n], i) => `<button class="chip" data-p="${i}">${n}</button>`).join("");
+$("progChips").onclick = (e) => { const b = e.target.closest("[data-p]"); if (!b) return; const [, d, s] = PROGRESSIONS[+b.dataset.p]; $("cProg").value = d; $("cScale").value = s; };
+
+function renderTargets() {
+  const tracks = state.tracks;
+  const tSel = $("tTrack"), sSel = $("tSlot");
+  const keepT = state.selected.track, keepS = state.selected.slot;
+  tSel.innerHTML = tracks.map((t, i) => `<option value="${i}">${i + 1}. ${esc(t.name)}</option>`).join("") || `<option>No tracks</option>`;
+  tSel.value = String(keepT);
+  const slots = (tracks[keepT] && tracks[keepT].slots) || [];
+  sSel.innerHTML = slots.map((s, i) => `<option value="${i}">Slot ${i + 1}${s.has_clip ? ` · ${esc(s.name || "clip")}` : " · empty"}</option>`).join("");
+  sSel.value = String(keepS);
+  const slot = slots[keepS];
+  $("tInfo").textContent = slot ? (slot.has_clip ? "" : "Empty slot") : "";
+  $("newClipBtn").style.display = slot && !slot.has_clip ? "" : "none";
+}
+$("tTrack").onchange = () => { state.selected = { track: +$("tTrack").value, slot: 0 }; renderTargets(); renderSession(); };
+$("tSlot").onchange = () => { state.selected.slot = +$("tSlot").value; renderTargets(); renderSession(); };
+const target = () => ({ track: state.selected.track, slot: state.selected.slot });
+const done = (msg) => { toast(msg); refreshSession(); };
+
+$("newClipBtn").onclick = (e) => act(e.target, async () => { await live("clip_create", { ...target(), length: 16, name: "Hellboy" }); done("Created a 4-bar clip"); });
+$("keyBtn").onclick = (e) => act(e.target, async () => {
+  const r = await live("notes_detect_key", { ...target(), top: 4 });
+  if (!r.count) { $("keyOut").textContent = "The clip has no notes yet."; return; }
+  $("keyOut").innerHTML = `<div class="big">${esc(r.key.root)} ${esc(r.key.scale)}</div>` +
+    r.candidates.slice(1).map((c) => `${esc(c.root)} ${esc(c.scale)}  ${c.score}`).join("\n");
+  $("cRoot").value = r.key.root; $("cScale").value = r.key.scale;
+});
+$("chordBtn").onclick = (e) => act(e.target, async () => {
+  const progression = $("cProg").value.split(/[\s,–-]+/).map(Number).filter((n) => n >= 1 && n <= 14);
+  if (!progression.length) throw new Error("Write degrees like 1 6 3 7");
+  const r = await live("notes_chords", { ...target(), root: $("cRoot").value, scale: $("cScale").value, progression,
+    size: +$("cSize").value, octave: +$("cOct").value, beats_per_chord: +$("cBeats").value, spread: $("cSpread").checked });
+  $("chordOut").textContent = r.chords.map((c) => `${c.degree}: ${c.notes.join(" ")}`).join("\n");
+  done(`Wrote ${r.chords.length} chords in ${r.root} ${r.scale.replace("_", " ")}`);
+});
+$("fitBtn").onclick = (e) => act(e.target, async () => {
+  const r = await live("notes_scale_fit", { ...target(), root: $("cRoot").value, scale: $("cScale").value, direction: $("fitDir").value });
+  done(`Moved ${r.moved} note${r.moved === 1 ? "" : "s"} into ${r.root} ${r.scale}`);
+});
+$("arpBtn").onclick = (e) => act(e.target, async () => {
+  const r = await live("notes_arpeggiate", { ...target(), style: $("aStyle").value, rate: +$("aRate").value, octaves: +$("aOct").value, gate: +$("aGate").value });
+  done(`Arpeggiated: ${r.written} notes`);
+});
+$("swingBtn").onclick = (e) => act(e.target, async () => {
+  const r = await live("notes_swing", { ...target(), preset: $("gPreset").value });
+  done(`Swing ${Math.round(r.swing_percent)}% on ${r.moved} notes`);
+});
+$("humBtn").onclick = (e) => act(e.target, async () => {
+  await live("notes_humanize", { ...target(), timing: +$("hTime").value, velocity: +$("hVel").value, seed: Date.now() % 100000 });
+  done("Humanized");
+});
+$("quantBtn").onclick = (e) => act(e.target, async () => {
+  await live("notes_quantize", { ...target(), grid: +$("qGrid").value, strength: +$("qStr").value });
+  done("Quantized");
+});
+$("diceBtn").onclick = () => { $("lSeed").value = Math.floor(Math.random() * 10000); };
+$("loopBtn").onclick = (e) => act(e.target, async () => {
+  const r = await live("quickloop_generate", { ...target(), mode: $("lMode").value, slices: +$("lSlices").value, seed: +$("lSeed").value });
+  done(`New variation in slot ${r.destination[1] + 1}`);
+});
+
+// ---------------------------------------------------------------- arrange
+const FORMS = [
+  ["Club", [["Intro", 16], ["Build", 8], ["Drop", 16], ["Break", 8], ["Drop 2", 16], ["Outro", 16]]],
+  ["Song", [["Intro", 4], ["Verse", 16], ["Chorus", 8], ["Verse 2", 16], ["Chorus", 8], ["Outro", 4]]],
+  ["Beat", [["Intro", 4], ["Hook", 8], ["Verse", 16], ["Hook", 8], ["Outro", 4]]],
+];
+let sections = [{ scene: 0, bars: 8, name: "Intro" }, { scene: 1, bars: 16, name: "Drop" }];
+$("formChips").innerHTML = FORMS.map(([n], i) => `<button class="chip" data-form="${i}">${n} form</button>`).join("");
+$("formChips").onclick = (e) => {
+  const b = e.target.closest("[data-form]"); if (!b) return;
+  const count = Math.max(1, state.session?.scene_count || 1);
+  sections = FORMS[+b.dataset.form][1].map(([name, bars], i) => ({ scene: Math.min(i, count - 1), bars, name }));
+  renderSections();
+};
+function sceneOptions(selected) {
+  const scenes = state.session?.scenes || [{ index: 0, name: "Scene 1" }];
+  return scenes.map((s) => `<option value="${s.index}"${s.index === selected ? " selected" : ""}>${s.index + 1}. ${esc(s.name || "Scene")}</option>`).join("");
+}
+function renderSections() {
+  $("sections").innerHTML = sections.map((s, i) => `<div class="section-row">
+    <span class="n">${i + 1}</span>
+    <select data-i="${i}" data-k="scene">${sceneOptions(s.scene)}</select>
+    <input type="number" min="1" value="${s.bars}" data-i="${i}" data-k="bars" title="Bars">
+    <input type="text" value="${esc(s.name)}" data-i="${i}" data-k="name" placeholder="Name">
+    <button class="btn sm ghost" data-del="${i}" title="Remove">✕</button></div>`).join("");
+}
+$("sections").addEventListener("input", (e) => {
+  const el = e.target; if (el.dataset.i === undefined) return;
+  const s = sections[+el.dataset.i];
+  s[el.dataset.k] = el.dataset.k === "name" ? el.value : +el.value;
+});
+$("sections").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-del]"); if (!b) return;
+  sections.splice(+b.dataset.del, 1); renderSections();
+});
+$("addSection").onclick = () => { sections.push({ scene: Math.min(sections.length, (state.session?.scene_count || 1) - 1), bars: 8, name: "" }); renderSections(); };
+$("buildBtn").onclick = (e) => act(e.target, async () => {
+  if (!sections.length) throw new Error("Add at least one section");
+  const r = await live("arrangement_from_scenes", { sections: sections.map((s) => ({ scene: s.scene, bars: s.bars, ...(s.name ? { name: s.name } : {}) })),
+    start_bar: +$("startBar").value, add_cues: $("addCues").checked });
+  $("buildOut").textContent = r.sections.map((s) => `bar ${s.start_bar}  ${s.name}  (${s.bars} bars, ${s.tracks.length} tracks)`).join("\n") + `\n${r.clips_placed} clips placed, ends at bar ${r.end_bar}`;
+  toast("Arrangement built");
+  loadArrangement();
+  live("arrangement_show", { view: "Arranger" }).catch(() => {});
+});
+$("showArr").onclick = (e) => act(e.target, () => live("arrangement_show", { view: "Arranger" }));
+$("backArr").onclick = (e) => act(e.target, () => live("arrangement_back_to_arranger"));
+$("recArr").onclick = (e) => act(e.target, async () => {
+  const st = await live("arrangement_state");
+  const r = await live("arrangement_record", { enabled: !st.record_mode });
+  toast(r.record_mode ? "Arrangement record armed" : "Arrangement record off");
+});
+$("refreshArr").onclick = () => loadArrangement();
+
+async function loadArrangement() {
+  renderSections();
+  if (!state.connected) return;
+  try {
+    const [st, ov] = await Promise.all([live("arrangement_state"), live("arrangement_overview")]);
+    const bpb = st.beats_per_bar || 4;
+    const lanes = ov.tracks || [];
+    const cueList = st.cues || [];
+    const end = Math.max(st.song_length || 0, ...lanes.flatMap((t) => (t.clips || []).map((c) => c.end)), bpb * 16);
+    const bars = Math.ceil(end / bpb) + 2;
+    const px = Math.max(14, Math.min(40, 900 / bars));
+    const W = 110 + bars * px;
+    $("arrInfo").textContent = `${Math.round((st.song_length || 0) / bpb)} bars · ${cueList.length} locators · record ${st.record_mode ? "on" : "off"}`;
+    let html = `<div class="tl-inner" style="width:${W}px"><div class="ruler">`;
+    const step = bars > 64 ? 8 : 4;
+    for (let b = 0; b < bars; b += step) html += `<span style="left:${110 + b * px}px">${b + 1}</span>`;
+    html += `</div>`;
+    cueList.forEach((c) => { html += `<div class="cue" style="left:${110 + (c.time / bpb) * px}px"><button data-cue="${c.index}">${esc(c.name || "Locator")}</button></div>`; });
+    lanes.forEach((t, ti) => {
+      html += `<div class="lane" style="--c:${trackColor(ti)}"><span class="lbl">${esc(t.name)}</span>`;
+      // back-to-back repeats of one clip read better as a single block "name ×N"
+      const runs = [];
+      [...(t.clips || [])].sort((a, b) => a.start - b.start).forEach((c) => {
+        const last = runs[runs.length - 1];
+        if (last && last.name === c.name && Math.abs(last.end - c.start) < 1e-3) { last.end = c.end; last.count += 1; }
+        else runs.push({ ...c, count: 1 });
+      });
+      runs.forEach((c) => {
+        const label = c.count > 1 ? `${c.name} ×${c.count}` : c.name;
+        html += `<div class="blk" style="left:${110 + (c.start / bpb) * px}px;width:${Math.max(4, ((c.end - c.start) / bpb) * px - 2)}px" title="${esc(label)}">${esc(label)}</div>`;
+      });
+      html += `</div>`;
+    });
+    $("timeline").innerHTML = html + `</div>`;
+  } catch (error) {
+    $("timeline").innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+  }
+}
+$("timeline").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-cue]"); if (b) act(null, () => live("cue_jump", { index: +b.dataset.cue }));
+});
+
+// ---------------------------------------------------------------- assistant
+const SUGGEST = [
+  "Write a dark i–VI–III–VII progression in A minor on a new MIDI track",
+  "Detect the key of my bass clip and fit the lead to it",
+  "Add MPC swing to every drum clip",
+  "Build an intro, drop and outro arrangement from my scenes",
+  "Balance the mix (I'll start playback)",
+];
+$("suggest").innerHTML = SUGGEST.map((s, i) => `<button class="chip" data-s="${i}">${esc(s)}</button>`).join("");
+$("suggest").onclick = (e) => { const b = e.target.closest("[data-s]"); if (b) { $("prompt").value = SUGGEST[+b.dataset.s]; send(); } };
+
+let chatAbort = null;
+const conversation = "main";
+function addMsg(kind, text) {
+  $("welcome")?.remove();
+  const node = document.createElement("div");
+  node.className = `msg ${kind}`;
+  node.dir = "auto"; // Persian, Arabic and Hebrew read right to left
+  if (text !== undefined) node.textContent = text;
+  $("msgs").appendChild(node);
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+  return node;
+}
+function renderMarkdown(text) {
+  return esc(text)
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+async function send() {
+  const text = $("prompt").value.trim();
+  if (!text || chatAbort) return;
+  $("prompt").value = ""; autosize();
+  addMsg("user", text);
+  const bot = addMsg("bot");
+  let raw = "";
+  const toolNodes = {};
+  // text and tool chips interleave in the order they happen
+  const lastPart = (cls) => { const prev = status.previousElementSibling; return prev && prev.classList.contains(cls) ? prev : null; };
+  const newPart = (cls) => { const n = document.createElement("div"); n.className = cls; n.dir = "auto"; bot.insertBefore(n, status); return n; };
+  const status = document.createElement("div"); status.className = "typing"; status.textContent = "Thinking…"; bot.appendChild(status);
+  chatAbort = new AbortController();
+  $("sendBtn").textContent = "Stop";
+  try {
+    const res = await fetch("/api/chat", { method: "POST", signal: chatAbort.signal,
+      headers: { "content-type": "application/json", "x-hellboy-token": TOKEN },
+      body: JSON.stringify({ conversation, message: text }) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    const reader = res.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
+    for (;;) {
+      const { value, done: finished } = await reader.read();
+      if (finished) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf("\n\n")) >= 0) {
+        const line = buffer.slice(0, cut); buffer = buffer.slice(cut + 2);
+        if (!line.startsWith("data: ")) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.type === "text") {
+          let body = lastPart("body");
+          if (!body) { body = newPart("body"); raw = ""; }
+          raw += ev.text; body.innerHTML = renderMarkdown(raw); status.textContent = "";
+        } else if (ev.type === "tool") {
+          const tools = lastPart("tools") || newPart("tools");
+          const chip = document.createElement("span"); chip.className = "tool run"; chip.textContent = ev.name; chip.title = JSON.stringify(ev.input);
+          tools.appendChild(chip); toolNodes[ev.id] = chip; status.textContent = "Working in Live…";
+        } else if (ev.type === "tool_result") {
+          const chip = toolNodes[ev.id]; if (chip) { chip.className = `tool ${ev.ok ? "ok" : "bad"}`; chip.title = ev.summary; }
+        } else if (ev.type === "notice") {
+          const n = document.createElement("div"); n.className = "msg note"; n.textContent = ev.text; bot.insertBefore(n, status);
+        } else if (ev.type === "error") {
+          const n = document.createElement("div"); n.className = "msg err"; n.textContent = ev.text; bot.insertBefore(n, status);
+          if (/API key/.test(ev.text)) { const go = document.createElement("button"); go.className = "btn sm"; go.textContent = "Open Setup"; go.onclick = () => show("setup"); bot.insertBefore(go, status); }
+        }
+        $("msgs").scrollTop = $("msgs").scrollHeight;
+      }
+    }
+  } catch (error) {
+    if (error.name !== "AbortError") { const n = document.createElement("div"); n.className = "msg err"; n.textContent = error.message; bot.insertBefore(n, status); }
+  } finally {
+    status.remove(); chatAbort = null; $("sendBtn").textContent = "Send"; refreshSession();
+  }
+}
+$("composer").onsubmit = (e) => { e.preventDefault(); if (chatAbort) chatAbort.abort(); else send(); };
+$("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+function autosize() { const t = $("prompt"); t.style.height = "auto"; t.style.height = Math.min(180, t.scrollHeight) + "px"; }
+$("prompt").addEventListener("input", autosize);
+$("newChat").onclick = async () => {
+  await api("/api/chat/reset", { conversation }).catch(() => {});
+  $("msgs").innerHTML = `<div class="welcome" id="welcome"><h2>New chat</h2><p>The assistant still sees your Live set.</p></div>`;
+};
+
+// ---------------------------------------------------------------- setup
+function renderSetup(s) {
+  const inst = s.install;
+  const outdated = inst.scriptInstalled && inst.installedVersion !== s.app.scriptVersion;
+  $("installKv").innerHTML = `<span>Status</span><span>${inst.scriptInstalled ? (outdated ? `installed ${esc(inst.installedVersion)} · update to ${esc(s.app.scriptVersion)}` : `installed ${esc(inst.installedVersion)}`) : "not installed"}</span>
+    <span>Folder</span><span>${esc(inst.scriptPath)}</span>`;
+  $("installBtn").textContent = !inst.scriptInstalled ? "Install" : outdated ? "Update" : "Reinstall";
+  $("uninstallBtn").style.display = inst.scriptInstalled ? "" : "none";
+  $("b1").className = "badge" + (inst.scriptInstalled && !outdated ? " done" : "");
+  $("b1").textContent = inst.scriptInstalled && !outdated ? "✓" : "1";
+  const ok = s.live.connected;
+  $("b2").className = "badge" + (ok ? " done" : ""); $("b2").textContent = ok ? "✓" : "2";
+  $("liveHelp").innerHTML = ok ? `<b style="color:var(--ok)">Connected</b> to Live ${esc(s.live.info.live_version || "")} · remote script ${esc(s.live.info.version || "1.0")}` : `Waiting for Live… ${esc(s.live.error || "")}`;
+  const st = s.settings;
+  $("b3").className = "badge" + (st.hasKey ? " done" : ""); $("b3").textContent = st.hasKey ? "✓" : "3";
+  fillSelect($("model"), st.models); $("model").value = st.model;
+  fillSelect($("effort"), st.efforts); $("effort").value = st.effort;
+  $("keyInfo").textContent = st.hasKey ? `Key ${st.keyHint} (${st.keySource === "environment" ? "from ANTHROPIC_API_KEY" : "saved"})` : "No key yet";
+  $("clearKey").style.display = st.keySource === "settings" ? "" : "none";
+  $("modelInfo").textContent = st.hasKey ? `${st.model} · ${st.effort}` : "";
+  $("regClaude").disabled = !inst.claude;
+  $("regClaude").title = inst.claude ? "" : "Claude Code is not installed";
+  $("regCodex").disabled = !inst.codex;
+  $("regCodex").title = inst.codex ? "" : "Codex is not set up";
+  const osc = s.live.info?.osc_port;
+  $("oscInfo").innerHTML = osc ? `OSC is listening on <code>127.0.0.1:${osc}</code>. Replies go to <code>/hellboy/reply</code>.` : "OSC starts with the Live script (port 8972).";
+}
+$("installBtn").onclick = (e) => act(e.target, async () => { const r = await api("/api/install", {}); toast("Installed. Restart Live if it was open."); refreshStatus(); return r; });
+$("uninstallBtn").onclick = (e) => act(e.target, async () => { await api("/api/uninstall", {}); toast("Removed the Live script"); refreshStatus(); });
+$("saveKey").onclick = (e) => act(e.target, async () => {
+  const key = $("apiKey").value.trim();
+  await api("/api/settings", { apiKey: key, model: $("model").value, effort: $("effort").value });
+  $("apiKey").value = ""; toast(key ? "Key saved" : "Settings saved"); refreshStatus();
+});
+$("clearKey").onclick = (e) => act(e.target, async () => { await api("/api/settings", { clearKey: true }); toast("Key removed"); refreshStatus(); });
+$("model").onchange = $("effort").onchange = () => act(null, async () => { await api("/api/settings", { model: $("model").value, effort: $("effort").value }); refreshStatus(); });
+const register = (target, extra = {}) => act(null, async () => { const r = await api("/api/register", { target, ...extra }); $("regOut").textContent = `Done: ${r.detail}`; toast("Connected"); });
+$("regClaude").onclick = () => register("claude");
+$("regCodex").onclick = () => register("codex");
+$("regProject").onclick = () => register("project", { dir: $("projDir").value });
+$("quitBtn").onclick = async () => { await api("/api/quit", {}).catch(() => {}); document.body.innerHTML = `<div class="empty" style="margin:20vh auto;max-width:420px">Hellboy Studio has stopped. Open the app again any time.</div>`; };
+document.addEventListener("click", (e) => { const a = e.target.closest("[data-go]"); if (a && !e.defaultPrevented) { e.preventDefault(); show(a.dataset.go); } });
+
+// ---------------------------------------------------------------- loops
+if (!TOKEN) {
+  document.body.innerHTML = `<div class="empty" style="margin:20vh auto;max-width:460px">Open Hellboy Studio from the app icon to get a secure link.</div>`;
+} else {
+  refreshStatus().then(() => { if (!state.connected || !state.status?.install.scriptInstalled) show("setup"); else refreshSession(); });
+  setInterval(refreshStatus, 4000);
+  setInterval(() => { if (state.view === "studio" || state.view === "create") refreshSession(); }, 2500);
+  setInterval(() => api("/api/heartbeat", {}).catch(() => {}), 15000);
+}
+</script>
+</body>
+</html>
