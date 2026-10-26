@@ -7,7 +7,7 @@ interface MockTrack {
   pan: number;
   mute: boolean;
   solo: boolean;
-  devices: { name: string; class: string; params: number }[];
+  devices: { name: string; class: string; params: number; active?: boolean }[];
   slots: { hasClip: boolean; name: string | null; notes: any[] }[];
 }
 
@@ -152,7 +152,7 @@ function dispatch(method: string, params: any): any {
       return {
         ...brief(index, track),
         devices: track.devices.map((d, i) => ({
-          index: i, name: d.name, class: d.class, active: true,
+          index: i, name: d.name, class: d.class, active: d.active !== false,
           chainable: false, parameter_count: d.params,
         })),
         slots: track.slots.map((s, i) => ({
@@ -245,6 +245,19 @@ function dispatch(method: string, params: any): any {
         })),
       };
     }
+    case "device_set_active": {
+      const device = trackAt(params.track).devices[Number(params.device || 0)];
+      if (!device) throw new Error("device index out of range");
+      device.active = params.active !== false;
+      return { name: device.name, active: device.active };
+    }
+    case "device_delete": {
+      const track = trackAt(params.track);
+      const index = Number(params.device || 0);
+      if (!track.devices[index]) throw new Error("device index out of range");
+      track.devices.splice(index, 1);
+      return { deleted: index };
+    }
     case "device_params": {
       const track = trackAt(params.track);
       const device = track.devices[Number(params.device || 0)];
@@ -267,8 +280,11 @@ function dispatch(method: string, params: any): any {
       };
     case "browser_children":
       return { path: params.path || "", items: [] };
-    case "browser_load":
+    case "browser_load": {
+      const name = String(params.path || "").split("/").pop() || "Device";
+      trackAt(params.track ?? 0).devices.push({ name, class: name.replace(/\s/g, ""), params: 8 });
       return { loaded: params.path, into_track: params.track ?? null };
+    }
     case "mix_report":
       return {
         tracks: state.tracks.map((t, i) => ({

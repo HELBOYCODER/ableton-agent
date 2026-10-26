@@ -34,13 +34,16 @@ That's it. The status dot turns green and you get:
 ![Hellboy Studio - Session](docs/screenshots/studio.png)
 
 - **Studio** - the Session grid: launch clips and scenes, volume, mute, solo,
-  transport, tempo, Undo.
+  new MIDI/audio/return tracks and scenes, transport, tempo, Undo.
 - **Create** - detect the key, write chord progressions (triads to 9ths,
   inversions, open voicings), fit notes to a scale, arpeggiate, MPC swing,
   humanize, quantize, and make Quick Loop variations.
 - **Arrange** - the song builder: pick scenes and bar lengths (or a Club /
   Song / Beat form) and it lays them out on the timeline with locators. A
   timeline view shows the result and jumps to locators.
+- **Sounds** - search Live's browser (instruments, drums, effects, samples,
+  plug-ins, your User Library) and load onto any track; see the device chain,
+  bypass or remove devices.
 - **Assistant** - ask in plain words, in any language ("write a dark minor
   progression on a new track and swing the drums"). It reads your set and makes
   the changes, showing each step. Uses your Anthropic API key, stored only on
@@ -124,7 +127,7 @@ Releases are built by `.github/workflows/hellboy-release.yml` (repo root) on a
 bundle, the remote script zip and `SHA256SUMS.txt`.
 
 ```bash
-git tag hellboy-v1.2.0 && git push origin hellboy-v1.2.0
+git tag hellboy-v1.3.0 && git push origin hellboy-v1.3.0
 ```
 
 ## Security

@@ -186,7 +186,7 @@ test("install writes the embedded remote script into the User Library", async ()
   assert.ok(fs.existsSync(init));
   assert.ok(fs.existsSync(path.join(res.json.path, "hb_arrangement.py")));
   assert.ok(fs.existsSync(path.join(res.json.path, "hb_osc.py")));
-  assert.equal(res.json.install.installedVersion, "1.2.0");
+  assert.equal(res.json.install.installedVersion, "1.3.0");
 });
 
 test("/api/call only runs registry methods with valid parameters", async () => {

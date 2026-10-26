@@ -163,7 +163,7 @@ Local:
 Hellboy Studio is compiled the same way from app/build/app.cjs. Then:
 
     node app/scripts/win-gui.mjs dist/hellboy-studio-win-x64.exe   # no console window
-    node app/scripts/mac-app.mjs dist/hellboy-studio-darwin-arm64 dist 1.2.0
+    node app/scripts/mac-app.mjs dist/hellboy-studio-darwin-arm64 dist 1.3.0
     codesign --force --deep --sign - "dist/Hellboy Studio.app"
 
 `pkg` here is the maintained @yao-pkg/pkg fork (a devDependency); the
@@ -185,8 +185,8 @@ On GitHub, .github/workflows/hellboy-release.yml (repo root) already does all of
 
 Trigger it:
 
-    git tag hellboy-v1.2.0
-    git push origin hellboy-v1.2.0
+    git tag hellboy-v1.3.0
+    git push origin hellboy-v1.3.0
 
 (The hellboy- prefix keeps it apart from the Python package's v* releases.)
 

@@ -1,6 +1,6 @@
 {
   "name": "@hellboy/app",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "Hellboy Studio - a desktop app for Hellboy Prod, no terminal needed.",
   "license": "MIT",

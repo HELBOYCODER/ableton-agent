@@ -129,6 +129,14 @@ code { font-family: var(--mono); font-size: 12.5px; background: #0f1115; border:
 .cue button { position: absolute; top: 2px; left: 2px; border: 0; border-radius: 4px; background: var(--accent); color: #fff;
   font-size: 10.5px; padding: 1px 6px; white-space: nowrap; }
 
+/* ---------- lists ---------- */
+.list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; max-height: 58vh; overflow-y: auto; }
+.item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #12141a; }
+.item .nm { flex: 1; min-width: 0; }
+.item .nm b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.item .nm small { color: var(--faint); font-family: var(--mono); font-size: 11px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.off .nm b { color: var(--faint); text-decoration: line-through; }
+
 /* ---------- chat ---------- */
 .chat { display: grid; grid-template-rows: 1fr auto; height: calc(100vh - 58px - 62px - 64px); min-height: 380px;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
@@ -210,6 +218,7 @@ ol.howto b { color: var(--text); }
     <button data-view="studio" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>Studio</button>
     <button data-view="create"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Create</button>
     <button data-view="arrange"><svg viewBox="0 0 24 24"><path d="M3 6h7M13 6h8M3 12h11M17 12h4M3 18h4M10 18h11"/></svg>Arrange</button>
+    <button data-view="sounds"><svg viewBox="0 0 24 24"><path d="M3 12h2l2-6 4 14 3-10 2 4h5"/></svg>Sounds</button>
     <button data-view="assistant"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Assistant</button>
     <button data-view="setup"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Setup</button>
     <div class="foot">Every change is one Undo in Live.</div>
@@ -220,6 +229,12 @@ ol.howto b { color: var(--text); }
     <section class="view active" id="view-studio">
       <h1>Session</h1>
       <p class="lead">Launch clips and scenes, mix, and pick a clip to work on in <b>Create</b>.</p>
+      <div class="row" style="margin-bottom:14px">
+        <button class="btn sm" id="addMidi">+ MIDI track</button>
+        <button class="btn sm" id="addAudio">+ Audio track</button>
+        <button class="btn sm" id="addReturn">+ Return</button>
+        <button class="btn sm" id="addScene">+ Scene</button>
+      </div>
       <div id="session" class="session"></div>
     </section>
 
@@ -347,6 +362,33 @@ ol.howto b { color: var(--text); }
         </div>
       </div>
       <div class="timeline" id="timeline"><div class="empty">Open this page with Live connected to see the arrangement.</div></div>
+    </section>
+
+    <!-- ======================= SOUNDS ======================= -->
+    <section class="view" id="view-sounds">
+      <h1>Sounds &amp; devices</h1>
+      <p class="lead">Search Live's browser and load instruments, effects and samples onto a track.</p>
+      <div class="target"><b>Track</b><select id="sTrack" aria-label="Track"></select><span class="muted">Loads go here.</span></div>
+      <div class="grid" style="grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr)">
+        <div class="card">
+          <h2>Browser</h2>
+          <form class="row" id="searchForm">
+            <input type="text" id="sQuery" placeholder="e.g. Operator, Reverb, 808, Drum Rack" style="flex:1; min-width:180px">
+            <select id="sCat">
+              <option value="">Everything</option><option value="instruments">Instruments</option><option value="drums">Drums</option>
+              <option value="audio_effects">Audio effects</option><option value="midi_effects">MIDI effects</option>
+              <option value="sounds">Sounds</option><option value="samples">Samples</option><option value="plugins">Plug-ins</option>
+              <option value="user_library">User Library</option><option value="packs">Packs</option>
+            </select>
+            <button class="btn primary" type="submit">Search</button>
+          </form>
+          <div class="list" id="sResults"><p class="muted" style="margin-top:12px">Results appear here.</p></div>
+        </div>
+        <div class="card">
+          <h2>Device chain</h2>
+          <div class="list" id="chain"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ======================= ASSISTANT ======================= -->
@@ -504,6 +546,7 @@ function show(view) {
   document.querySelectorAll("nav button[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
   if (view === "arrange") loadArrangement();
+  if (view === "sounds") loadChain();
   if (view === "setup") refreshStatus();
   if (view === "assistant") $("prompt").focus();
   refreshSession();
@@ -789,6 +832,55 @@ async function loadArrangement() {
 $("timeline").addEventListener("click", (e) => {
   const b = e.target.closest("[data-cue]"); if (b) act(null, () => live("cue_jump", { index: +b.dataset.cue }));
 });
+
+// ---------------------------------------------------------------- tracks & scenes
+const addThing = (method, params, msg) => act(null, async () => { await live(method, params); done(msg); });
+$("addMidi").onclick = () => addThing("track_create_midi", { index: -1 }, "Added a MIDI track");
+$("addAudio").onclick = () => addThing("track_create_audio", { index: -1 }, "Added an audio track");
+$("addReturn").onclick = () => addThing("track_create_return", {}, "Added a return track");
+$("addScene").onclick = () => addThing("scene_create", { index: -1 }, "Added a scene");
+
+// ---------------------------------------------------------------- sounds
+function renderSoundTracks() {
+  const sel = $("sTrack");
+  sel.innerHTML = state.tracks.map((t, i) => `<option value="${i}">${i + 1}. ${esc(t.name)}</option>`).join("") || "<option>No tracks</option>";
+  sel.value = String(state.selected.track);
+}
+$("sTrack").onchange = () => { state.selected = { track: +$("sTrack").value, slot: 0 }; renderTargets(); renderSession(); loadChain(); };
+$("searchForm").onsubmit = (e) => {
+  e.preventDefault();
+  const query = $("sQuery").value.trim();
+  if (!query) return;
+  act(e.submitter, async () => {
+    $("sResults").innerHTML = `<p class="muted">Searching…</p>`;
+    const cat = $("sCat").value;
+    const r = await live("browser_search", { query, limit: 60, ...(cat ? { categories: [cat] } : {}) });
+    $("sResults").innerHTML = r.items.length ? r.items.map((it, i) => `<div class="item"><div class="nm"><b>${esc(it.name)}</b><small>${esc(it.path)}</small></div>
+      <button class="btn sm primary" data-load="${i}">Load</button></div>`).join("") : `<p class="muted">Nothing found for “${esc(query)}”.</p>`;
+    $("sResults")._items = r.items;
+  });
+};
+$("sResults").onclick = (e) => {
+  const b = e.target.closest("[data-load]"); if (!b) return;
+  const item = $("sResults")._items[+b.dataset.load];
+  act(b, async () => { await live("browser_load", { path: item.path, track: state.selected.track }); toast(`Loaded ${item.name}`); loadChain(); refreshSession(); });
+};
+async function loadChain() {
+  renderSoundTracks();
+  if (!state.connected || !state.tracks.length) { $("chain").innerHTML = `<p class="muted">Connect Live to see devices.</p>`; return; }
+  try {
+    const r = await live("device_list", { track: state.selected.track });
+    $("chain").innerHTML = r.devices.length ? r.devices.map((d) => `<div class="item${d.active ? "" : " off"}"><div class="nm"><b>${esc(d.name)}</b><small>${esc(d.class || "")} · ${d.parameter_count} params</small></div>
+      <button class="btn sm" data-bypass="${d.index}" data-on="${d.active ? 1 : 0}">${d.active ? "On" : "Off"}</button>
+      <button class="btn sm ghost" data-del="${d.index}" title="Delete device">✕</button></div>`).join("") : `<p class="muted">No devices on this track yet.</p>`;
+  } catch (error) { $("chain").innerHTML = `<p class="muted">${esc(error.message)}</p>`; }
+}
+$("chain").onclick = (e) => {
+  const on = e.target.closest("[data-bypass]"), del = e.target.closest("[data-del]");
+  const track = state.selected.track;
+  if (on) act(on, async () => { await live("device_set_active", { track, device: +on.dataset.bypass, active: on.dataset.on !== "1" }); loadChain(); });
+  if (del) act(del, async () => { await live("device_delete", { track, device: +del.dataset.del }); toast("Device deleted - Undo brings it back"); loadChain(); });
+};
 
 // ---------------------------------------------------------------- assistant
 const SUGGEST = [

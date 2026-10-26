@@ -41,7 +41,7 @@ from . import hb_arrangement
 from . import hb_osc
 
 PRODUCT = "Hellboy Prod"
-SCRIPT_VERSION = "1.2.0"
+SCRIPT_VERSION = "1.3.0"
 API_VERSION = 1
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8971
