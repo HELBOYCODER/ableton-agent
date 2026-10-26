@@ -1,0 +1,269 @@
+HELLBOY PROD - BUILD GUIDE
+==========================
+
+A terminal agent bridge for a running music production session.
+Three parts: a Python remote script, an MCP server, an installer.
+
+Read this file, then read the code. Everything here is original.
+
+
+--------------------------------------------------------------------------
+1. WHAT IT IS
+--------------------------------------------------------------------------
+
+Hellboy Prod lets a terminal coding agent drive a live DAW session:
+
+    agent --stdio(MCP)--> hellboy-bridge --TCP/JSON--> remote script --> DAW
+
+The agent gets 117 tools: session state, tracks, clips, scenes, MIDI notes,
+music theory (key detection, scale fit, chord progressions, arpeggiator, MPC
+swing presets), the Arrangement View and locators (with a scene auto-arranger),
+devices, browser loading, automation envelopes, a mix report / auto balance
+pass and a "quick loop" slice-and-shuffle generator. Every call is one undo
+step in Live.
+
+Three ways in, one handler table:
+
+    Hellboy Studio (browser UI) --HTTP--> app --TCP/JSON--+
+    agent --stdio(MCP)--> bridge (or app --mcp) ---------+--> remote script
+    OSC controller --UDP 8972------------------------------+
+
+Hard design rules:
+  * The remote script uses ONLY the Python standard library.
+  * The remote script NEVER touches the DAW API from a socket thread.
+  * The wire format is newline delimited JSON. No websockets, no deps.
+  * The bridge ships as a single self-contained binary per platform.
+  * Nothing is required on the user machine except the DAW and the agent.
+
+
+--------------------------------------------------------------------------
+2. REPOSITORY LAYOUT
+--------------------------------------------------------------------------
+
+    remote-script/HellboyProd/   Python remote script (stdlib only)
+    bridge/                      TypeScript MCP server (stdio)
+    installer/                   Cross-platform installer
+    mock-live/                   Fake DAW server for CI
+    app/                         Hellboy Studio: local web UI + assistant +
+                                 installer + MCP bridge in one binary
+    docs/DESIGN-1.2.md           Design of the 1.2 release
+    ../.github/workflows/hellboy-*.yml   CI + release (at the repo root)
+    .mcp.json                    Project level MCP registration
+    BUILD_GUIDE.txt              This file
+
+
+--------------------------------------------------------------------------
+3. WIRE PROTOCOL (frozen)
+--------------------------------------------------------------------------
+
+TCP on 127.0.0.1:8971, one JSON object per line, UTF-8.
+
+  request   {"id":7,"method":"clip_set_notes","params":{...}}
+  response  {"id":7,"ok":true,"result":{...}}
+  response  {"id":7,"ok":false,"error":"ValueError: no clip at ..."}
+
+Handshake on connect:
+
+  -> {"id":1,"method":"hello","params":{"client":"bridge","version":"1.0.0"}}
+  <- {"id":1,"ok":true,"result":{"product":"Hellboy Prod","api":1,...}}
+
+Port comes from HELLBOY_PORT, default 8971. If the port is taken the remote
+script binds an ephemeral port and reports it in the hello reply.
+
+Methods are snake_case and domain prefixed. A handler may return the sentinel
+DEFERRED, in which case the reply is sent later through ctx.reply_later().
+Only mix_balance uses this today: it samples meters over several ticks.
+
+
+--------------------------------------------------------------------------
+4. REMOTE SCRIPT CONTRACT
+--------------------------------------------------------------------------
+
+Entry: remote-script/HellboyProd/__init__.py, class HellboyProd.
+Subclass of the framework ControlSurface.
+
+  * __init__ starts the socket thread, then calls
+    self.schedule_message(1, self._tick).
+  * Socket threads only append (conn, request) to self._queue.
+  * _tick() runs on the main thread, pops one request at a time, resolves the
+    handler by method name, calls handler(self, **params) and writes the reply.
+  * Every handler is wrapped in try/except. A handler bug never kills the
+    socket, it just returns an error object with a traceback.
+  * Handlers live in hb_*.py modules, each exposing a HANDLERS dict that
+    __init__ merges.
+
+To add a feature: write the function in the right hb_*.py, add it to that
+module's HANDLERS dict, add a tool entry in bridge/src/registry.ts. Nothing
+else changes.
+
+
+--------------------------------------------------------------------------
+5. LOCAL DEVELOPMENT
+--------------------------------------------------------------------------
+
+    npm install
+    npm run build          # compile all three workspaces
+    npm test               # spins up mock-live, exercises the bridge
+    npm run test:py        # loads the remote script as Live does, fake LOM
+    npm run lint:py        # byte-compile the remote script
+    npm run studio         # run Hellboy Studio from source
+    npm run bundle         # produce bridge/build/bridge.cjs + installer cjs
+
+Run the bridge against the fake DAW without a DAW:
+
+    node mock-live/dist/index.js &            # prints "mock-live ready"
+    node bridge/dist/src/index.js             # speaks MCP on stdio
+
+Smoke test the raw socket:
+
+    node -e '
+      const n=require("net"),s=n.createConnection(8971,"127.0.0.1");
+      s.on("connect",()=>s.write(JSON.stringify({id:1,method:"session_state"})+"\n"));
+      s.on("data",d=>{console.log(d.toString());process.exit(0)});
+    '
+
+Install for real use:
+
+    node installer/dist/index.js install
+    node installer/dist/index.js status
+    node installer/dist/index.js uninstall
+
+
+--------------------------------------------------------------------------
+6. RUNNING INSIDE THE DAW
+--------------------------------------------------------------------------
+
+Easiest: open Hellboy Studio and use Setup -> Install. From source:
+
+1. npm install && npm run build && npm run bundle
+2. node installer/dist/index.js install
+3. Open the DAW.
+4. Preferences -> Link / MIDI -> Control Surface -> "Hellboy Prod"
+   (also set an unused Input/Output pair so the surface activates)
+5. Verify: the log line "Hellboy Prod bridge listening on 127.0.0.1:8971"
+6. Start the agent in a project folder. It reads .mcp.json automatically.
+
+If the agent reports "not connected", the control surface is not selected.
+
+
+--------------------------------------------------------------------------
+7. BUILDING BINARIES FOR MAC AND WINDOWS
+--------------------------------------------------------------------------
+
+Local:
+
+    npm run bundle
+    npx pkg bridge/build/bridge.cjs --targets node20-macos-arm64 \
+        --output dist/hellboy-bridge-darwin-arm64
+    npx pkg bridge/build/bridge.cjs --targets node20-macos-x64 \
+        --output dist/hellboy-bridge-darwin-x64
+    npx pkg bridge/build/bridge.cjs --targets node20-win-x64 \
+        --output dist/hellboy-bridge-win-x64.exe
+
+Hellboy Studio is compiled the same way from app/build/app.cjs. Then:
+
+    node app/scripts/win-gui.mjs dist/hellboy-studio-win-x64.exe   # no console window
+    node app/scripts/mac-app.mjs dist/hellboy-studio-darwin-arm64 dist 1.3.0
+    codesign --force --deep --sign - "dist/Hellboy Studio.app"
+
+`pkg` here is the maintained @yao-pkg/pkg fork (a devDependency); the
+original vercel pkg has no node20 targets.
+
+macOS binaries must be ad-hoc signed or Gatekeeper quarantines them:
+
+    codesign --force --sign - dist/hellboy-bridge-darwin-arm64
+
+On GitHub, .github/workflows/hellboy-release.yml (repo root) already does all of this:
+
+  * matrix over macos-14 (arm64), macos-15-intel (x64), windows-latest (x64)
+  * npm ci, npm run bundle, pkg per target (bridge, installer, studio)
+  * codesign on macOS, GUI subsystem patch on Windows
+  * runs the Studio end-to-end tests against each compiled binary
+  * builds and signs "Hellboy Studio.app" (HellboyStudio-macOS-<arch>.zip)
+  * publishes a release with binaries, the app zips, the zipped remote script
+    and SHA256SUMS.txt
+
+Trigger it:
+
+    git tag hellboy-v1.3.0
+    git push origin hellboy-v1.3.0
+
+(The hellboy- prefix keeps it apart from the Python package's v* releases.)
+
+For an end user binary distribution, tell them to run:
+
+    xattr -dr com.apple.quarantine hellboy-bridge-darwin-arm64     # macOS
+    unzip hellboyprod-remote-script.zip   # next to the installer
+    hellboy-installer-darwin-arm64 install
+
+The remote script itself never needs compiling: the DAW loads the .py files.
+
+
+--------------------------------------------------------------------------
+8. RELEASE CHECKLIST
+--------------------------------------------------------------------------
+
+[ ] npm test green on all three CI operating systems
+[ ] npm run test:py and npm run lint:py clean
+[ ] .mcp.json has the correct relative bridge path
+[ ] installer status prints sane paths on macOS and Windows
+[ ] tag pushed, release contains 8 binaries + 2 macOS app zips + remote
+    script zip + checksums
+[ ] Hellboy Studio opens from a double click on macOS and Windows
+[ ] README quickstart verified on a clean machine
+
+
+--------------------------------------------------------------------------
+9. EXTENDING
+--------------------------------------------------------------------------
+
+Ideas that fit the existing seams with no refactor:
+
+  * DONE in 1.1: scale / chord helpers (notes_scale_fit, notes_chords,
+    notes_detect_key, notes_arpeggiate) and a groove library (notes_swing)
+  * DONE in 1.1: undo grouping - _dispatch wraps every call in
+    begin_undo_step / end_undo_step (Live 11+)
+  * DONE in 1.2: session auto-arranger (arrangement_from_scenes), Arrangement
+    View tools and locators (hb_arrangement.py)
+  * DONE in 1.2: a second transport (OSC, hb_osc.py) in front of the same
+    handler table
+  * DONE in 1.2: Hellboy Studio desktop app (app/)
+  * a device preset scanner: browser_search + device_params
+  * OSC push: Live listeners that send tempo/playing changes to controllers
+
+Every new capability is: handler -> HANDLERS entry -> registry entry.
+
+
+--------------------------------------------------------------------------
+10. TROUBLESHOOTING
+--------------------------------------------------------------------------
+
+"timeout calling ..."
+    The DAW main thread is blocked or the control surface is off.
+    Check the DAW log window.
+
+"UnknownMethod"
+    The remote script on disk is older than the bridge. Re-run the installer
+    and restart the DAW.
+
+Port already in use
+    Set HELLBOY_PORT to another value in both .mcp.json and the DAW
+    environment, then restart.
+
+Nothing loads from browser_load
+    Browser loads target the SELECTED track. Call track_select first.
+
+mix_balance does nothing
+    Meters are instantaneous. Start the transport, then call it again.
+
+Hellboy Studio does not open / shows "missing or wrong token"
+    Open it from the app icon, not from an old browser tab: every launch makes
+    a new private link. Logs are in ~/.hellboy/app.log.
+
+"needs Live 12 or newer"
+    Creating or deleting arrangement clips uses Live 12 API. On Live 11 use
+    arrangement_place_clip / arrangement_from_scenes, which copy Session clips.
+
+OSC does nothing
+    OSC binds 127.0.0.1:8972. For a phone or tablet set HELLBOY_OSC_HOST=0.0.0.0
+    (and HELLBOY_OSC_REPLY_PORT to the controller's receive port).

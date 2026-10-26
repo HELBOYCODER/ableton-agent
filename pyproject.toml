@@ -41,3 +41,8 @@ ableton_agent = [
     "remote_script/ChatGPTBridge/__init__.py",
     "gui/static/*",
 ]
+
+[tool.pytest.ini_options]
+# hellboy-prod/ has its own stdlib unittest suite (npm run test:py) that installs
+# different Live stubs; keep pytest on this package's tests only.
+testpaths = ["tests"]
