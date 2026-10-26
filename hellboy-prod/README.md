@@ -31,6 +31,8 @@ Download from the latest release:
 
 That's it. The status dot turns green and you get:
 
+![Hellboy Studio - Session](docs/screenshots/studio.png)
+
 - **Studio** - the Session grid: launch clips and scenes, volume, mute, solo,
   transport, tempo, Undo.
 - **Create** - detect the key, write chord progressions (triads to 9ths,
@@ -47,6 +49,10 @@ That's it. The status dot turns green and you get:
 First launch on macOS: the app is not notarized, so right-click it ->
 **Open** once (or run `xattr -dr com.apple.quarantine "Hellboy Studio.app"`).
 On Windows, SmartScreen may ask once: **More info -> Run anyway**.
+
+| Create | Arrange |
+| --- | --- |
+| ![Create](docs/screenshots/create.png) | ![Arrange](docs/screenshots/arrange.png) |
 
 The app runs in the background with no window of its own; it closes itself a
 few minutes after its last browser tab closes. Open it again any time; a second
