@@ -1,0 +1,68 @@
+name: hellboy-ci
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["hellboy-prod/**", ".github/workflows/hellboy-*.yml"]
+  pull_request:
+    paths: ["hellboy-prod/**", ".github/workflows/hellboy-*.yml"]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: hellboy-prod
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: hellboy-prod/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:py
+      - run: npm run lint:py
+
+  bundle:
+    name: bundle (${{ matrix.os }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: hellboy-prod/package-lock.json
+
+      - run: npm ci
+      - run: npm run bundle
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ matrix.os }}
+          path: |
+            hellboy-prod/bridge/build/bridge.cjs
+            hellboy-prod/installer/build/installer.cjs
+          if-no-files-found: error

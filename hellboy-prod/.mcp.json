@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hellboy": {
+      "command": "node",
+      "args": ["bridge/dist/src/index.js"],
+      "env": {
+        "HELLBOY_PORT": "8971"
+      }
+    }
+  }
+}

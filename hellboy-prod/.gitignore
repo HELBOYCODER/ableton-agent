@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.DS_Store
+SHA256SUMS.txt
+hellboyprod-remote-script/
+hellboyprod-remote-script.zip

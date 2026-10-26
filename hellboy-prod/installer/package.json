@@ -1,0 +1,15 @@
+{
+  "name": "@hellboy/installer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Installs the remote script and registers the MCP server.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "bin": {
+    "hellboy-installer": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --outfile=build/installer.cjs"
+  }
+}
