@@ -17,8 +17,8 @@ import {
   unregisterCodex,
   writeProjectMcpConfig,
 } from "../../installer/src/lib";
-import { Assistant, AssistantEvent } from "./assistant";
-import { EFFORTS, MODELS, loadSettings, saveSettings } from "./config";
+import { Assistant, AssistantEvent, listModels } from "./assistant";
+import { PRESETS, loadSettings, presetById, resolveApiKey, saveSettings, updateSettings } from "./config";
 import { REMOTE_SCRIPT } from "./generated/remote-script";
 import { createAppServer } from "./server";
 
@@ -43,7 +43,10 @@ Setup
   hellboy install | uninstall        the Live script
   hellboy connect claude|codex       register the MCP bridge with an agent
   hellboy connect project <folder>   write <folder>/.mcp.json
-  hellboy config [--key sk-ant-...] [--model ${MODELS.join("|")}] [--effort ${EFFORTS.join("|")}]
+  hellboy config                     show the assistant's provider, model and key
+  hellboy config --provider <id> [--base-url URL] [--model M] [--key K] [--effort low|medium|high]
+                                     providers: ${PRESETS.map((p) => p.id).join(", ")}
+  hellboy models                     list the models your provider offers
   hellboy mcp                        speak MCP on stdio (for agents)
 
 Remote: add --server http://host:7777 --token <secret> (or HELLBOY_SERVER /
@@ -290,23 +293,30 @@ async function connect(target: string | undefined, folder: string | undefined): 
 }
 
 function config(flags: Args["flags"]): void {
-  const settings = loadSettings();
-  if (typeof flags.key === "string") {
-    if (!/^sk-ant-[\w-]{10,}$/.test(flags.key)) throw new CliError("that does not look like an Anthropic API key (sk-ant-...)");
-    settings.apiKey = flags.key;
-  }
-  if (flags["clear-key"]) settings.apiKey = undefined;
-  if (typeof flags.model === "string") {
-    if (!MODELS.includes(flags.model as any)) throw new CliError(`model must be one of ${MODELS.join(", ")}`);
-    settings.model = flags.model as any;
-  }
-  if (typeof flags.effort === "string") {
-    if (!EFFORTS.includes(flags.effort as any)) throw new CliError(`effort must be one of ${EFFORTS.join(", ")}`);
-    settings.effort = flags.effort as any;
+  const str = (name: string) => (typeof flags[name] === "string" ? (flags[name] as string) : undefined);
+  let settings = loadSettings();
+  try {
+    settings = updateSettings(settings, {
+      preset: str("provider"),
+      baseUrl: str("base-url"),
+      model: str("model"),
+      apiKey: str("key"),
+      clearKey: Boolean(flags["clear-key"]),
+      effort: str("effort"),
+    });
+  } catch (error) {
+    throw new CliError((error as Error).message);
   }
   saveSettings(settings);
-  const key = settings.apiKey;
-  print({ model: settings.model, effort: settings.effort, key: key ? `${key.slice(0, 7)}...${key.slice(-4)}` : null });
+  const key = resolveApiKey(settings);
+  print({
+    provider: `${settings.preset} (${presetById(settings.preset).label})`,
+    protocol: settings.provider,
+    baseUrl: settings.baseUrl || "official endpoint",
+    model: settings.model || "(none - see: hellboy models)",
+    effort: settings.provider === "anthropic" && !settings.baseUrl ? settings.effort : undefined,
+    key: key.key ? `${key.key.slice(0, 7)}...${key.key.slice(-4)} (${key.source})` : null,
+  });
 }
 
 function statusText(s: any): string {
@@ -347,6 +357,14 @@ export async function runCli(argv: string[]): Promise<void> {
   }
   if (command === "connect") return connect(rest[0], rest[1]);
   if (command === "config") return config(flags);
+  if (command === "models") {
+    try {
+      for (const id of await listModels(loadSettings())) print(id);
+    } catch (error) {
+      throw new CliError((error as Error).message);
+    }
+    return;
+  }
   if (command === "tools") {
     const filter = (rest[0] || "").toLowerCase();
     for (const tool of TOOLS) {

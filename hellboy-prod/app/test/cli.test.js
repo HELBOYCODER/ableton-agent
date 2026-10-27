@@ -111,3 +111,17 @@ test("serve --lan accepts any host name but still needs the token", async () => 
   assert.equal(await get({ host: `studio.local:${port}`, "x-hellboy-token": TOKEN }), 200);
   assert.equal(await get({ host: `studio.local:${port}` }), 401);
 });
+
+test("config switches the assistant to any provider", () => {
+  const ollama = hellboy(["config", "--provider", "ollama", "--model", "llama3.1"]);
+  assert.equal(ollama.code, 0, ollama.err);
+  const shown = JSON.parse(ollama.out);
+  assert.equal(shown.protocol, "openai");
+  assert.equal(shown.baseUrl, "http://localhost:11434/v1");
+  assert.equal(shown.model, "llama3.1");
+  const custom = hellboy(["config", "--provider", "anthropic-compatible", "--base-url", "https://llm.example/anthropic/", "--model", "my-model"]);
+  assert.equal(JSON.parse(custom.out).baseUrl, "https://llm.example/anthropic");
+  const bad = hellboy(["config", "--provider", "nope"]);
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /unknown provider/);
+});

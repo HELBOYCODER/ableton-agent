@@ -47,8 +47,7 @@ That's it. The status dot turns green and you get:
   bypass or remove devices.
 - **Assistant** - ask in plain words, in any language ("write a dark minor
   progression on a new track and swing the drums"). It reads your set and makes
-  the changes, showing each step. Uses your Anthropic API key, stored only on
-  your computer.
+  the changes, showing each step. Works with any AI provider (see below).
 
 First launch on macOS: the app is not notarized, so right-click it ->
 **Open** once (or run `xattr -dr com.apple.quarantine "Hellboy Studio.app"`).
@@ -61,6 +60,28 @@ On Windows, SmartScreen may ask once: **More info -> Run anyway**.
 The app runs in the background with no window of its own; it closes itself a
 few minutes after its last browser tab closes. Open it again any time; a second
 launch just brings the page back.
+
+## Assistant providers
+
+The assistant speaks two protocols, so it works with nearly any model service:
+
+| Provider | Protocol | Base URL | Key |
+| --- | --- | --- | --- |
+| Anthropic (Claude) | Anthropic | official | yes |
+| Anthropic-compatible | Anthropic | your URL | optional |
+| OpenAI | OpenAI | `https://api.openai.com/v1` | yes |
+| OpenRouter | OpenAI | `https://openrouter.ai/api/v1` | yes |
+| DeepSeek | OpenAI | `https://api.deepseek.com/v1` | yes |
+| Groq | OpenAI | `https://api.groq.com/openai/v1` | yes |
+| Ollama | OpenAI | `http://localhost:11434/v1` | no |
+| LM Studio | OpenAI | `http://localhost:1234/v1` | no |
+| OpenAI-compatible (vLLM, llama.cpp, LocalAI, ...) | OpenAI | your URL | optional |
+
+Choose it in **Setup -> Assistant** (with **Load models** to list what the
+provider offers) or with `hellboy config --provider <id>`. Every tool call is
+validated against the same schemas whichever model makes it. The model must
+support tool calling. Switching provider clears the saved key, so a key for
+one service is never sent to another.
 
 ## Command line: `hellboy`
 
@@ -76,7 +97,9 @@ hellboy tempo 124
 hellboy tools chord                  # list tools (filter optional)
 hellboy call notes_chords track=0 slot=0 root=A scale=minor progression=[1,6,3,7]
 hellboy chat "make the drums swing like MPC 58"   # or just: hellboy chat
-hellboy config --key sk-ant-...      # API key for the assistant
+hellboy config --provider anthropic --key sk-ant-...           # Claude
+hellboy config --provider ollama --model llama3.1             # local model, no key
+hellboy models                       # what your provider offers
 hellboy connect claude               # register the MCP bridge with Claude Code
 ```
 

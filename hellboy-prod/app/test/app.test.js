@@ -15,7 +15,8 @@ const APP_CMD = process.env.HELLBOY_APP_BIN ? [path.resolve(process.env.HELLBOY_
 const MOCK = path.join(ROOT, "mock-live", "dist", "index.js");
 const LIVE_PORT = 8993;
 
-let mock, app, fake, base, token, home;
+let mock, app, fake, fakeOpenAi, base, token, home;
+const openaiRequests = [];
 const anthropicRequests = [];
 
 function waitFor(child, pattern) {
@@ -65,7 +66,10 @@ function startFakeAnthropic() {
         const parsed = JSON.parse(body);
         anthropicRequests.push({ headers: req.headers, url: req.url, body: parsed });
         res.writeHead(200, { "content-type": "text/event-stream" });
-        if (anthropicRequests.length === 1) {
+        // first turn of a chat: call tools; once tool results come back: answer
+        const last = parsed.messages.at(-1);
+        const hasResults = Array.isArray(last.content) && last.content.some((b) => b.type === "tool_result");
+        if (!hasResults) {
           res.end(sse([
             messageStart("msg_1"),
             ...toolUse(0, "toolu_ok", "session_state", {}),
@@ -86,6 +90,46 @@ function startFakeAnthropic() {
     });
     server.listen(0, "127.0.0.1", () => resolve(server));
   });
+}
+
+// ------------------------------------------------------- fake OpenAI-compatible
+function startFakeOpenAi() {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      if (req.method === "GET" && req.url === "/v1/models") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ object: "list", data: [{ id: "local-llama" }, { id: "test-model" }] }));
+        return;
+      }
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        const parsed = JSON.parse(body);
+        openaiRequests.push({ headers: req.headers, url: req.url, body: parsed });
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+        const chunk = (delta, finish = null) => send({ id: "c1", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: finish }] });
+        if (parsed.messages.at(-1).role !== "tool") {
+          // tool call arguments arrive in pieces, as real servers stream them
+          chunk({ role: "assistant", tool_calls: [{ index: 0, id: "call_ok", type: "function", function: { name: "session_state", arguments: "" } }] });
+          chunk({ tool_calls: [{ index: 0, function: { arguments: "{}" } }] });
+          chunk({ tool_calls: [{ index: 1, id: "call_bad", type: "function", function: { name: "session_set_tempo", arguments: '{"tem' } }] });
+          chunk({ tool_calls: [{ index: 1, function: { arguments: 'po": 5}' } }] });
+          chunk({}, "tool_calls");
+        } else {
+          chunk({ role: "assistant", content: "Two tracks " });
+          chunk({ content: "in your set." });
+          chunk({}, "stop");
+        }
+        res.end("data: [DONE]\n\n");
+      });
+    });
+    server.listen(0, "127.0.0.1", () => resolve(server));
+  });
+}
+
+function chatEvents(text) {
+  return text.split("\n\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
 }
 
 // ------------------------------------------------------------------ helpers
@@ -119,6 +163,7 @@ before(async () => {
   mock = spawn(process.execPath, [MOCK], { env: { ...process.env, HELLBOY_PORT: String(LIVE_PORT) } });
   await waitFor(mock, /mock-live ready/);
   fake = await startFakeAnthropic();
+  fakeOpenAi = await startFakeOpenAi();
   // a PATH with only node on it, so no real `claude` CLI is found or run
   const bin = path.join(home, "bin");
   fs.mkdirSync(bin);
@@ -152,6 +197,7 @@ after(() => {
   app?.kill();
   mock?.kill();
   fake?.close();
+  fakeOpenAi?.close();
 });
 
 // -------------------------------------------------------------------- tests
@@ -244,6 +290,64 @@ test("the assistant runs the tool loop: valid calls reach Live, invalid input is
   assert.ok(!toolResults[0].is_error);
   assert.equal(toolResults[1].is_error, true);
   assert.match(toolResults[1].content, /INVALID_INPUT/);
+});
+
+test("an OpenAI-compatible provider runs the same tool loop", async () => {
+  const set = await request("POST", "/api/settings", {
+    body: { preset: "openai-compatible", baseUrl: `http://127.0.0.1:${fakeOpenAi.address().port}/v1/`, model: "test-model" },
+  });
+  assert.equal(set.status, 200, set.text);
+  assert.equal(set.json.provider, "openai");
+  assert.equal(set.json.baseUrl, `http://127.0.0.1:${fakeOpenAi.address().port}/v1`);
+  assert.equal(set.json.hasKey, false, "switching provider drops the previous provider's key");
+  assert.equal(set.json.ready, true, "no key needed for a custom OpenAI-compatible server");
+
+  const models = await request("GET", "/api/models");
+  assert.deepEqual(models.json.models, ["local-llama", "test-model"]);
+
+  const res = await request("POST", "/api/chat", { body: { conversation: "oa", message: "How many tracks?" } });
+  const events = chatEvents(res.text);
+  assert.deepEqual(events.filter((e) => e.type === "tool_result").map((e) => [e.id, e.ok]), [["call_ok", true], ["call_bad", false]]);
+  assert.equal(events.filter((e) => e.type === "text").map((e) => e.text).join(""), "Two tracks in your set.");
+
+  assert.equal(openaiRequests.length, 2);
+  const [first, second] = openaiRequests;
+  assert.equal(first.url, "/v1/chat/completions");
+  assert.equal(first.body.model, "test-model");
+  assert.equal(first.body.stream, true);
+  assert.equal(first.headers.authorization, undefined, "no key configured, none sent");
+  assert.ok(first.body.tools.length > 100 && first.body.tools.every((t) => t.type === "function" && t.function.parameters.type === "object"));
+  assert.equal(first.body.messages[0].role, "system");
+  const tools = second.body.messages.filter((m) => m.role === "tool");
+  assert.deepEqual(tools.map((m) => m.tool_call_id), ["call_ok", "call_bad"]);
+  assert.match(tools[1].content, /INVALID_INPUT/);
+  assert.equal(second.body.messages.find((m) => m.tool_calls).tool_calls[1].function.arguments, '{"tempo": 5}');
+});
+
+test("an Anthropic-compatible server gets the plain Messages API", async () => {
+  const before = anthropicRequests.length;
+  const set = await request("POST", "/api/settings", {
+    body: { preset: "anthropic-compatible", baseUrl: `http://127.0.0.1:${fake.address().port}`, model: "compat-model", apiKey: "compat-key-123" },
+  });
+  assert.equal(set.status, 200, set.text);
+  const res = await request("POST", "/api/chat", { body: { conversation: "ac", message: "How many tracks?" } });
+  assert.equal(chatEvents(res.text).filter((e) => e.type === "text").map((e) => e.text).join(""), "Your set has 2 tracks.");
+  const first = anthropicRequests[before];
+  assert.equal(first.body.model, "compat-model");
+  assert.equal(first.body.fallbacks, undefined);
+  assert.equal(first.body.output_config, undefined);
+  assert.equal(first.headers["anthropic-beta"], undefined);
+  assert.ok(first.body.tools.every((t) => t.eager_input_streaming === undefined));
+});
+
+test("settings reject a bad base URL and a fixed-URL provider ignores none", async () => {
+  const bad = await request("POST", "/api/settings", { body: { preset: "openai-compatible", baseUrl: "ftp://nope" } });
+  assert.equal(bad.status, 400);
+  const fixed = await request("POST", "/api/settings", { body: { preset: "openrouter", baseUrl: "http://evil.example" } });
+  assert.equal(fixed.status, 400);
+  const ok = await request("POST", "/api/settings", { body: { preset: "ollama" } });
+  assert.equal(ok.json.baseUrl, "http://localhost:11434/v1");
+  assert.equal(ok.json.keyRequired, false);
 });
 
 test("--mcp turns the app binary into the MCP bridge", async () => {
