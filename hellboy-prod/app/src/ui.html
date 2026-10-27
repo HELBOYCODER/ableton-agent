@@ -451,16 +451,27 @@ ol.howto b { color: var(--text); }
 
         <div class="step"><div class="badge" id="b3">3</div><div class="card">
           <h2>Assistant</h2>
-          <p>The built-in assistant uses your Anthropic API key. It is stored only on this computer.</p>
+          <p>Pick any AI provider: Claude, OpenAI, OpenRouter, DeepSeek, Groq, a local model in Ollama or LM Studio, or any OpenAI- or Anthropic-compatible server. Keys stay on this computer.</p>
           <div class="row">
-            <input type="password" id="apiKey" placeholder="sk-ant-…" style="flex:1; min-width:220px" autocomplete="off">
-            <button class="btn primary" id="saveKey">Save key</button>
-            <button class="btn ghost sm" id="clearKey">Remove</button>
+            <label class="f" style="flex:1; min-width:220px">Provider<select id="provider"></select></label>
+            <label class="f" id="effortWrap">Effort<select id="effort"></select></label>
+          </div>
+          <div class="row" id="baseUrlRow">
+            <label class="f" style="flex:1; min-width:220px">Base URL<input type="text" id="baseUrl" placeholder="https://your-server/v1" autocomplete="off" spellcheck="false"></label>
           </div>
           <div class="row">
-            <label class="f">Model<select id="model"></select></label>
-            <label class="f">Effort<select id="effort"></select></label>
-            <span class="muted" id="keyInfo" style="align-self:flex-end"></span>
+            <label class="f" style="flex:1; min-width:220px">Model<input type="text" id="model" list="modelList" placeholder="model name" autocomplete="off" spellcheck="false"></label>
+            <datalist id="modelList"></datalist>
+            <button class="btn sm" id="loadModels" style="align-self:flex-end">Load models</button>
+          </div>
+          <div class="row" id="keyRow">
+            <label class="f" style="flex:1; min-width:220px"><span id="keyLabel">API key</span><input type="password" id="apiKey" placeholder="paste your key" autocomplete="off"></label>
+            <button class="btn ghost sm" id="clearKey" style="align-self:flex-end">Remove key</button>
+          </div>
+          <div class="row">
+            <span class="muted" id="keyInfo"></span>
+            <div class="spacer"></div>
+            <button class="btn primary" id="saveAi">Save</button>
           </div>
         </div></div>
 
@@ -1023,7 +1034,7 @@ async function send() {
           const n = document.createElement("div"); n.className = "msg note"; n.textContent = ev.text; bot.insertBefore(n, status);
         } else if (ev.type === "error") {
           const n = document.createElement("div"); n.className = "msg err"; n.textContent = ev.text; bot.insertBefore(n, status);
-          if (/API key/.test(ev.text)) { const go = document.createElement("button"); go.className = "btn sm"; go.textContent = "Open Setup"; go.onclick = () => show("setup"); bot.insertBefore(go, status); }
+          if (/API key|Setup|base URL|model/.test(ev.text)) { const go = document.createElement("button"); go.className = "btn sm"; go.textContent = "Open Setup"; go.onclick = () => show("setup"); bot.insertBefore(go, status); }
         }
         $("msgs").scrollTop = $("msgs").scrollHeight;
       }
@@ -1057,12 +1068,19 @@ function renderSetup(s) {
   $("b2").className = "badge" + (ok ? " done" : ""); $("b2").textContent = ok ? "✓" : "2";
   $("liveHelp").innerHTML = ok ? `<b style="color:var(--ok)">Connected</b> to Live ${esc(s.live.info.live_version || "")} · remote script ${esc(s.live.info.version || "1.0")}` : `Waiting for Live… ${esc(s.live.error || "")}`;
   const st = s.settings;
-  $("b3").className = "badge" + (st.hasKey ? " done" : ""); $("b3").textContent = st.hasKey ? "✓" : "3";
-  fillSelect($("model"), st.models); $("model").value = st.model;
-  fillSelect($("effort"), st.efforts); $("effort").value = st.effort;
-  $("keyInfo").textContent = st.hasKey ? `Key ${st.keyHint} (${st.keySource === "environment" ? "from ANTHROPIC_API_KEY" : "saved"})` : "No key yet";
+  state.ai = st;
+  $("b3").className = "badge" + (st.ready ? " done" : ""); $("b3").textContent = st.ready ? "✓" : "3";
+  // the status poll must not overwrite what the user is typing
+  const idle = (el) => document.activeElement !== el && !el.dataset.dirty;
+  if (idle($("provider"))) { fillSelect($("provider"), st.presets.map((p) => p.id), st.presets.map((p) => p.label)); $("provider").value = st.preset; }
+  if (idle($("effort"))) { fillSelect($("effort"), st.efforts); $("effort").value = st.effort; }
+  if (idle($("baseUrl"))) $("baseUrl").value = st.baseUrl;
+  if (idle($("model"))) $("model").value = st.model;
+  renderProviderFields(st.preset);
+  $("keyInfo").textContent = st.hasKey ? `Key ${st.keyHint} (${st.keySource === "environment" ? "from the environment" : "saved"})`
+    : st.keyRequired ? "No key yet" : "No key needed for this provider";
   $("clearKey").style.display = st.keySource === "settings" ? "" : "none";
-  $("modelInfo").textContent = st.hasKey ? `${st.model} · ${st.effort}` : "";
+  $("modelInfo").textContent = st.ready ? `${st.model}${st.provider === "anthropic" && !st.baseUrl ? ` · ${st.effort}` : ""}` : "";
   $("regClaude").disabled = !inst.claude;
   $("regClaude").title = inst.claude ? "" : "Claude Code is not installed";
   $("regCodex").disabled = !inst.codex;
@@ -1072,13 +1090,43 @@ function renderSetup(s) {
 }
 $("installBtn").onclick = (e) => act(e.target, async () => { const r = await api("/api/install", {}); toast("Installed. Restart Live if it was open."); refreshStatus(); return r; });
 $("uninstallBtn").onclick = (e) => act(e.target, async () => { await api("/api/uninstall", {}); toast("Removed the Live script"); refreshStatus(); });
-$("saveKey").onclick = (e) => act(e.target, async () => {
-  const key = $("apiKey").value.trim();
-  await api("/api/settings", { apiKey: key, model: $("model").value, effort: $("effort").value });
-  $("apiKey").value = ""; toast(key ? "Key saved" : "Settings saved"); refreshStatus();
+function renderProviderFields(id) {
+  const preset = (state.ai?.presets || []).find((p) => p.id === id);
+  if (!preset) return;
+  $("baseUrlRow").style.display = preset.custom ? "" : "none";
+  $("effortWrap").style.display = preset.id === "anthropic" ? "" : "none";
+  $("keyLabel").textContent = preset.keyRequired ? "API key" : "API key (optional)";
+  if (preset.models && !$("modelList").children.length) $("modelList").innerHTML = preset.models.map((m) => `<option value="${esc(m)}">`).join("");
+}
+["provider", "baseUrl", "model", "effort", "apiKey"].forEach((id) => $(id).addEventListener("input", () => { $(id).dataset.dirty = "1"; }));
+$("provider").onchange = (e) => act(null, async () => {
+  // switching provider clears model and key: a key for one service must never go to another
+  await api("/api/settings", { preset: $("provider").value });
+  ["baseUrl", "model", "apiKey"].forEach((id) => { $(id).value = ""; delete $(id).dataset.dirty; });
+  $("modelList").innerHTML = ""; delete $("provider").dataset.dirty;
+  await refreshStatus();
+});
+$("saveAi").onclick = (e) => act(e.target, async () => {
+  const change = { model: $("model").value.trim(), effort: $("effort").value };
+  if ($("baseUrlRow").style.display !== "none") change.baseUrl = $("baseUrl").value.trim();
+  if ($("apiKey").value.trim()) change.apiKey = $("apiKey").value.trim();
+  await api("/api/settings", change);
+  $("apiKey").value = "";
+  ["provider", "baseUrl", "model", "effort", "apiKey"].forEach((id) => delete $(id).dataset.dirty);
+  toast("Assistant settings saved"); await refreshStatus();
+});
+$("loadModels").onclick = (e) => act(e.target, async () => {
+  // save what is typed first so the listing uses this URL and key
+  const change = {};
+  if ($("baseUrlRow").style.display !== "none") change.baseUrl = $("baseUrl").value.trim();
+  if ($("apiKey").value.trim()) change.apiKey = $("apiKey").value.trim();
+  if (Object.keys(change).length) { await api("/api/settings", change); $("apiKey").value = ""; }
+  const { models } = await api("/api/models");
+  $("modelList").innerHTML = models.map((m) => `<option value="${esc(m)}">`).join("");
+  toast(models.length ? `${models.length} models - pick one in the Model box` : "The provider listed no models");
+  $("model").focus();
 });
 $("clearKey").onclick = (e) => act(e.target, async () => { await api("/api/settings", { clearKey: true }); toast("Key removed"); refreshStatus(); });
-$("model").onchange = $("effort").onchange = () => act(null, async () => { await api("/api/settings", { model: $("model").value, effort: $("effort").value }); refreshStatus(); });
 const register = (target, extra = {}) => act(null, async () => { const r = await api("/api/register", { target, ...extra }); $("regOut").textContent = `Done: ${r.detail}`; toast("Connected"); });
 $("regClaude").onclick = () => register("claude");
 $("regCodex").onclick = () => register("codex");

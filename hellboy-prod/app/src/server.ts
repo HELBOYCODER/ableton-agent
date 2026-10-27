@@ -17,8 +17,8 @@ import {
   unregisterCodex,
   writeProjectMcpConfig,
 } from "../../installer/src/lib";
-import { Assistant, AssistantEvent } from "./assistant";
-import { EFFORTS, MODELS, loadSettings, log, resolveApiKey, saveSettings } from "./config";
+import { Assistant, AssistantEvent, listModels } from "./assistant";
+import { EFFORTS, PRESETS, loadSettings, log, presetById, resolveApiKey, saveSettings, updateSettings } from "./config";
 import { REMOTE_SCRIPT, SCRIPT_VERSION } from "./generated/remote-script";
 import UI from "./ui.html";
 
@@ -90,13 +90,19 @@ export function createAppServer(options: AppServerOptions) {
   function settingsView() {
     const settings = loadSettings();
     const key = resolveApiKey(settings);
+    const preset = presetById(settings.preset);
     return {
+      preset: settings.preset,
+      provider: settings.provider,
+      baseUrl: settings.baseUrl,
+      keyRequired: preset.keyRequired,
+      ready: Boolean(settings.model) && (!preset.keyRequired || Boolean(key.key)) && (!preset.custom || Boolean(settings.baseUrl)),
       hasKey: Boolean(key.key),
       keySource: key.source,
       keyHint: key.key ? `${key.key.slice(0, 7)}...${key.key.slice(-4)}` : null,
       model: settings.model,
       effort: settings.effort,
-      models: MODELS,
+      presets: PRESETS,
       efforts: EFFORTS,
     };
   }
@@ -175,17 +181,20 @@ export function createAppServer(options: AppServerOptions) {
 
     "POST /api/settings": async (req) => {
       const body = await readJson(req);
-      const settings = loadSettings();
-      if (body.clearKey) settings.apiKey = undefined;
-      if (typeof body.apiKey === "string" && body.apiKey.trim()) {
-        const key = body.apiKey.trim();
-        if (!/^sk-ant-[\w-]{10,}$/.test(key)) throw new HttpError(400, "that does not look like an Anthropic API key (sk-ant-...)");
-        settings.apiKey = key;
+      try {
+        saveSettings(updateSettings(loadSettings(), body));
+      } catch (error) {
+        throw new HttpError(400, (error as Error).message);
       }
-      if (MODELS.includes(body.model)) settings.model = body.model;
-      if (EFFORTS.includes(body.effort)) settings.effort = body.effort;
-      saveSettings(settings);
       return settingsView();
+    },
+
+    "GET /api/models": async () => {
+      try {
+        return { models: await listModels(loadSettings()) };
+      } catch (error) {
+        throw new HttpError(502, (error as Error).message);
+      }
     },
 
     "POST /api/chat/reset": async (req) => {
